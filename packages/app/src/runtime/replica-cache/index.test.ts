@@ -25,6 +25,10 @@ class MemoryStorage implements ReplicaCacheStorage {
     this.writes += 1;
     this.values.set(key, value);
   }
+
+  async removeItem(key: string): Promise<void> {
+    this.values.delete(key);
+  }
 }
 
 function workspace(
