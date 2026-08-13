@@ -1,7 +1,9 @@
 import MarkdownIt from "markdown-it";
 
+import { findUnescapedDelimiter, markdownMath } from "./markdown-math";
+
 // Only block maps are needed here; inline parsing belongs to each rendered block.
-const markdownBlockParser = new MarkdownIt();
+const markdownBlockParser = new MarkdownIt().use(markdownMath);
 markdownBlockParser.core.ruler.disable("inline");
 
 // The renderer decides what counts as a definition, so ask the same parser: a block
@@ -33,6 +35,19 @@ function foldLinkReferenceDefinitions(blocks: string[]): string[] {
   return folded;
 }
 
+const DISPLAY_MATH_START =
+  /^(?:(?: {0,3}>[ \t]?)|(?: {0,3}(?:[-+*]|\d{1,9}[.)])[ \t]+))* {0,3}(\$\$|\\\[)/;
+
+function getStreamedMathClosing(line: string): "$$" | "\\]" | null {
+  const match = DISPLAY_MATH_START.exec(line);
+  if (!match) {
+    return null;
+  }
+
+  const closing = match[1] === "$$" ? "$$" : "\\]";
+  return findUnescapedDelimiter(line.slice(match[0].length), closing) === -1 ? closing : null;
+}
+
 export function splitMarkdownBlocks(text: string): string[] {
   if (text.length === 0) {
     return [];
@@ -40,14 +55,14 @@ export function splitMarkdownBlocks(text: string): string[] {
 
   const blocks: string[] = [];
   let currentLines: string[] = [];
+  let activeDisplayMathClosing: "$$" | "\\]" | null = null;
   let sawBlockSeparator = false;
   const lines = text.split("\n");
-  const structuralBlankLines = getStructuralBlankLines(text, lines);
+  const { structuralBlankLines, literalLines } = getMarkdownStructure(text, lines);
 
   for (const [index, line] of lines.entries()) {
     const isBlankLine = line.trim().length === 0;
-
-    if (isBlankLine && structuralBlankLines.has(index)) {
+    if (isBlankLine && (activeDisplayMathClosing || structuralBlankLines.has(index))) {
       currentLines.push(line);
       continue;
     }
@@ -66,6 +81,19 @@ export function splitMarkdownBlocks(text: string): string[] {
     }
 
     currentLines.push(line);
+
+    if (literalLines.has(index)) {
+      continue;
+    }
+
+    if (activeDisplayMathClosing) {
+      if (findUnescapedDelimiter(line, activeDisplayMathClosing) !== -1) {
+        activeDisplayMathClosing = null;
+      }
+      continue;
+    }
+
+    activeDisplayMathClosing = getStreamedMathClosing(line);
   }
 
   if (currentLines.length > 0) {
@@ -75,18 +103,27 @@ export function splitMarkdownBlocks(text: string): string[] {
   return foldLinkReferenceDefinitions(blocks.filter((block) => block.length > 0));
 }
 
-function getStructuralBlankLines(text: string, lines: string[]): Set<number> {
-  const blankLines = new Set<number>();
+function getMarkdownStructure(
+  text: string,
+  lines: string[],
+): { structuralBlankLines: Set<number>; literalLines: Set<number> } {
+  const structuralBlankLines = new Set<number>();
+  const literalLines = new Set<number>();
   for (const token of markdownBlockParser.parse(text, {})) {
     if (token.level !== 0 || !token.map) {
       continue;
     }
     const [start, end] = token.map;
-    for (let index = start; index < end - 1; index += 1) {
+    if (token.type === "fence") {
+      for (let index = start; index < end; index++) {
+        literalLines.add(index);
+      }
+    }
+    for (let index = start; index < end - 1; index++) {
       if (lines[index]?.trim().length === 0) {
-        blankLines.add(index);
+        structuralBlankLines.add(index);
       }
     }
   }
-  return blankLines;
+  return { structuralBlankLines, literalLines };
 }
