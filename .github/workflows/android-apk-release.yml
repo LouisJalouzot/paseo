@@ -89,7 +89,7 @@ jobs:
 
       - name: Generate Android project
         run: |
-          npm run build:client
+          npm run build:app-deps
           cd packages/app
           APP_VARIANT=development npx expo prebuild --platform android --non-interactive
 
