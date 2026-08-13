@@ -1,8 +1,12 @@
 import type MarkdownIt from "markdown-it";
 import { createMarkdownParser } from "@/utils/markdown-parser";
+import { markdownMath } from "./markdown-math";
 
-export function createAssistantMarkdownParser(): MarkdownIt {
+export function createAssistantMarkdownParser(renderMath = false): MarkdownIt {
   const parser = createMarkdownParser({ linkify: true });
+  if (renderMath) {
+    parser.use(markdownMath);
+  }
   const defaultValidateLink = parser.validateLink.bind(parser);
 
   // Assistant messages are the only surface allowed to link into the

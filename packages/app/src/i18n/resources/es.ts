@@ -2042,6 +2042,10 @@ export const es: TranslationResources = {
         description:
           "Mostrar los bloques de pensamiento y razonamiento del agente totalmente expandidos de forma predeterminada",
       },
+      renderLatex: {
+        label: "Renderizar fórmulas LaTeX",
+        description: "Compone las fórmulas del asistente con KaTeX; pulsa una para ver su código",
+      },
       toolCallDetail: {
         label: "Visualización de llamadas a herramientas",
         description: "Cómo aparecen las llamadas a herramientas en la cronología",

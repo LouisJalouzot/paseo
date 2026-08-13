@@ -2009,6 +2009,11 @@ export const ja: TranslationResources = {
         label: "常に思考プロセスを展開",
         description: "デフォルトでAIのエージェント思考・推論ブロックを完全に展開して表示します",
       },
+      renderLatex: {
+        label: "LaTeX 数式を表示",
+        description:
+          "アシスタントの数式を KaTeX で組版します。数式をクリックするとソースを表示します",
+      },
       toolCallDetail: {
         label: "ツール呼び出しの表示",
         description: "タイムラインでのツール呼び出しの表示方法",

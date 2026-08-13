@@ -2026,6 +2026,10 @@ export const ptBR: TranslationResources = {
         description:
           "Mostrar os blocos de pensamento e raciocínio do agente totalmente expandidos por padrão",
       },
+      renderLatex: {
+        label: "Renderizar fórmulas LaTeX",
+        description: "Formata a matemática do assistente com KaTeX; clique para ver o código-fonte",
+      },
       toolCallDetail: {
         label: "Exibição de chamadas de ferramentas",
         description: "Como as chamadas de ferramentas aparecem na linha do tempo",
