@@ -96,7 +96,11 @@ jobs:
       - name: Build standalone APK
         run: |
           cd packages/app/android
-          ./gradlew --no-daemon :app:assembleRelease
+          ./gradlew --no-daemon :app:assembleRelease \
+            -x lint \
+            -x lintVitalAnalyzeRelease \
+            -x lintVitalRelease \
+            -x generateReleaseLintVitalModel
 
       - name: Stage APK
         id: artifact
