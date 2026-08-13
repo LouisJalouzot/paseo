@@ -9,7 +9,11 @@ on:
         description: "Upstream release tag; empty uses the latest stable release"
         required: false
         type: string
-
+      patched_revision:
+        description: "Patched tag revision"
+        required: false
+        default: "1"
+        type: string
 permissions:
   contents: write
   issues: write
@@ -32,21 +36,36 @@ jobs:
         id: release
         env:
           REQUESTED_TAG: ${{ inputs.upstream_tag }}
+          REQUESTED_REVISION: ${{ inputs.patched_revision }}
         run: |
           tag="$REQUESTED_TAG"
           if [[ -z "$tag" ]]; then
             tag="$(gh api repos/getpaseo/paseo/releases/latest --jq .tag_name)"
           fi
+          revision="${REQUESTED_REVISION:-1}"
           if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
             echo "Invalid release tag: $tag" >&2
             exit 1
           fi
-          patched_tag="${tag}-patched.1"
+          if [[ ! "$revision" =~ ^[1-9][0-9]*$ ]]; then
+            echo "Invalid patched revision: $revision" >&2
+            exit 1
+          fi
+
+          patched_tag="${tag}-patched.${revision}"
           echo "upstream_tag=$tag" >> "$GITHUB_OUTPUT"
           echo "patched_tag=$patched_tag" >> "$GITHUB_OUTPUT"
+
           if git ls-remote --exit-code --tags origin "refs/tags/$patched_tag" >/dev/null 2>&1; then
+            echo "source_exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "source_exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          if gh release view "$patched_tag" --json assets \
+            --jq 'any(.assets[]; .name | endswith(".AppImage"))' | grep -qx true; then
             echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "$patched_tag already exists"
+            echo "$patched_tag and its AppImage already exist"
           else
             echo "skip=false" >> "$GITHUB_OUTPUT"
           fi
@@ -60,23 +79,30 @@ jobs:
       - uses: cachix/install-nix-action@v31
         if: steps.release.outputs.skip == 'false'
 
-      - name: Create patched release branch
+      - name: Check out patched source
         if: steps.release.outputs.skip == 'false'
         env:
+          SOURCE_EXISTS: ${{ steps.release.outputs.source_exists }}
           UPSTREAM_TAG: ${{ steps.release.outputs.upstream_tag }}
+          PATCHED_TAG: ${{ steps.release.outputs.patched_tag }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if [[ "$SOURCE_EXISTS" == "true" ]]; then
+            git fetch --force origin "refs/tags/$PATCHED_TAG:refs/tags/$PATCHED_TAG"
+            git switch --detach "$PATCHED_TAG"
+            exit 0
+          fi
+
           git remote add upstream https://github.com/getpaseo/paseo.git
           git fetch --force upstream "refs/tags/$UPSTREAM_TAG:refs/tags/$UPSTREAM_TAG"
-          upstream_commit="$(git rev-list -n 1 "$UPSTREAM_TAG")"
           git fetch origin refs/heads/latex-v0.3.1:refs/remotes/origin/latex-v0.3.1
-          git switch --detach "$upstream_commit"
+          git switch --detach "$(git rev-list -n 1 "$UPSTREAM_TAG")"
           git switch -c "patched-$UPSTREAM_TAG"
           git cherry-pick 57c9991ce 897c74f95 66ee44fc5
 
       - name: Update Nix dependency hash
-        if: steps.release.outputs.skip == 'false'
+        if: steps.release.outputs.skip == 'false' && steps.release.outputs.source_exists == 'false'
         run: |
           ./scripts/update-nix.sh
           git add package-lock.json nix/npm-deps.hash
@@ -97,8 +123,46 @@ jobs:
           npm run typecheck --workspace=@getpaseo/app
           nix build .#default
 
-      - name: Publish patched release
+      - name: Build patched AppImage
         if: steps.release.outputs.skip == 'false'
+        env:
+          UPSTREAM_TAG: ${{ steps.release.outputs.upstream_tag }}
+          EP_GH_IGNORE_TIME: "true"
+          PASEO_DESKTOP_SMOKE: "1"
+          PASEO_DESKTOP_SMOKE_ARTIFACT_DIR: ${{ runner.temp }}/desktop-smoke
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb xauth
+          version="${UPSTREAM_TAG#v}"
+          # shellcheck disable=SC2016
+          node -e '
+            const fs = require("node:fs");
+            const path = "packages/desktop/package.json";
+            const json = JSON.parse(fs.readFileSync(path, "utf8"));
+            json.version = process.argv[1];
+            fs.writeFileSync(path, `${JSON.stringify(json, null, 2)}\n`);
+          ' "$version"
+          npm run build:desktop -- \
+            --publish never \
+            --linux \
+            --x64 \
+            -c.publish.provider=github \
+            -c.publish.owner=LouisJalouzot \
+            -c.publish.repo=paseo \
+            -c.publish.releaseType=release \
+            -c.publish.channel=latest
+
+      - name: Upload packaged smoke diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-smoke-linux-x64
+          path: ${{ runner.temp }}/desktop-smoke
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Publish patched source
+        if: steps.release.outputs.skip == 'false' && steps.release.outputs.source_exists == 'false'
         env:
           UPSTREAM_TAG: ${{ steps.release.outputs.upstream_tag }}
           PATCHED_TAG: ${{ steps.release.outputs.patched_tag }}
@@ -111,6 +175,28 @@ jobs:
             "HEAD:refs/heads/patched-$UPSTREAM_TAG" \
             "refs/tags/$PATCHED_TAG" \
             HEAD:refs/heads/patched-release
+
+      - name: Publish patched AppImage
+        if: steps.release.outputs.skip == 'false'
+        env:
+          PATCHED_TAG: ${{ steps.release.outputs.patched_tag }}
+        run: |
+          if ! gh release view "$PATCHED_TAG" >/dev/null 2>&1; then
+            gh release create "$PATCHED_TAG" \
+              --verify-tag \
+              --title "Paseo $PATCHED_TAG" \
+              --notes "Patched Paseo release with LaTeX rendering and local provider fixes."
+          fi
+          mapfile -d '' files < <(
+            find packages/desktop/release -maxdepth 1 -type f \
+              \( -name '*.AppImage' -o -name '*.AppImage.blockmap' -o -name '*-linux.yml' \) \
+              -print0
+          )
+          if (( ${#files[@]} == 0 )); then
+            echo "No AppImage release artifacts found" >&2
+            exit 1
+          fi
+          gh release upload "$PATCHED_TAG" "${files[@]}" --clobber
 
       - name: Open failure issue
         if: failure()
