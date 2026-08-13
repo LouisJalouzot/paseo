@@ -84,6 +84,7 @@ export interface AppSettings {
   autoExpandReasoning: boolean;
   toolCallDetailLevel: ToolCallDetailLevel;
   chatOutlineEnabled: boolean;
+  renderLatex: boolean;
   vimKeybindings: boolean;
   /** Desktop-only preferences for implicit opens into the ordinary side pane. */
   openInSidePane: OpenInSidePanePreferences;
@@ -135,6 +136,7 @@ export const DEFAULT_CLIENT_SETTINGS: AppSettings = {
   autoExpandReasoning: false,
   toolCallDetailLevel: "detailed",
   chatOutlineEnabled: true,
+  renderLatex: true,
   vimKeybindings: false,
   openInSidePane: DEFAULT_OPEN_IN_SIDE_PANE_PREFERENCES,
 };
@@ -228,6 +230,7 @@ const StoredAppSettingsSchema = z
     // COMPAT(compactToolCalls): migrated in v0.1.105, remove after 2027-01-12.
     compactToolCalls: z.boolean().optional().catch(undefined),
     chatOutlineEnabled: z.boolean().catch(true),
+    renderLatex: z.boolean().catch(true),
     vimKeybindings: z.boolean().catch(false),
     openInSidePane: z
       .object({
@@ -415,6 +418,7 @@ function pickAppSettingsFromLegacy(legacy: StoredAppSettings): AppSettings {
     contentFontSize: legacy.uiBaseFontSize,
   };
 }
+
 
 export function parseTerminalScrollbackLines(value: unknown): number | null {
   let numericValue = NaN;
