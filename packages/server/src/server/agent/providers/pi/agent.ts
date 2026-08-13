@@ -63,6 +63,7 @@ import {
   type PiCapturedUserMessageEntry,
 } from "./history-mapper.js";
 import { materializeProviderImage } from "../provider-image-output.js";
+import { mapPiBackgroundTaskNotification } from "./background-task-notification.js";
 import { PiCliRuntime } from "./cli-runtime.js";
 import { revertPiConversation } from "./rewind.js";
 import { listPiImportableSessions, readPiImportSessionConfig } from "./session-descriptor.js";
@@ -1371,6 +1372,12 @@ export class PiRpcAgentSession implements AgentSession {
       this.provider,
       await this.runtimeSession.getMessages(),
       this.capturedUserEntries,
+      {
+        mapCustomMessage: (text, provider) => {
+          const item = mapPiBackgroundTaskNotification(text);
+          return item ? { type: "timeline", provider, item } : null;
+        },
+      },
     );
   }
 
@@ -2239,15 +2246,18 @@ export class PiRpcAgentSession implements AgentSession {
     }
     if (event.message.role === "custom") {
       const text = getUserMessageText(event.message.content);
+      const item = text ? mapPiBackgroundTaskNotification(text) : null;
       if (text) {
         this.emit({
           type: "timeline",
           provider: this.provider,
           turnId,
-          item: { type: "assistant_message", text },
+          item: item ?? { type: "assistant_message", text },
         });
       }
-      this.completeTurn(turnId, []);
+      if (turnId && !this.activeTurnStarted) {
+        this.completeTurn(turnId, []);
+      }
       return;
     }
   }
