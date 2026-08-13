@@ -1944,6 +1944,10 @@ export const ar: TranslationResources = {
         label: "عرض التفكير دائماً",
         description: "إظهار تفكير الوكيل وخطوات الاستدلال بشكل كامل بشكل افتراضي",
       },
+      renderLatex: {
+        label: "عرض صيغ LaTeX",
+        description: "تنسيق رياضيات المساعد باستخدام KaTeX؛ انقر على الصيغة لعرض المصدر",
+      },
       toolCallDetail: {
         label: "عرض استدعاءات الأدوات",
         description: "كيفية ظهور استدعاءات الأدوات في المخطط الزمني",
