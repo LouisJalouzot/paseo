@@ -71,8 +71,10 @@ import { getMarkdownListMarker, getMarkdownListSpacing } from "@/utils/markdown-
 import { markdownNodeContainsType } from "@/utils/markdown-ast";
 import { useStableEvent } from "@/hooks/use-stable-event";
 import { HighlightedCodeBlock } from "@/components/highlighted-code-block";
+import { MathFormula, type MathFormulaProps } from "@/components/math-formula";
 import { splitMarkdownBlocks } from "@/utils/split-markdown-blocks";
 import { createAssistantMarkdownParser } from "@/utils/assistant-markdown-parser";
+import { useSettings } from "@/hooks/use-settings";
 import { formatDuration, formatMessageTimestamp } from "@/utils/time";
 import { writeMarkdownToRichClipboard } from "@/utils/rich-clipboard";
 import { getDefaultMarkdownClipboardEnvironment } from "@/utils/rich-clipboard-default-environment";
@@ -948,6 +950,48 @@ function getMarkdownNodeText(node: ASTNode): string {
   return node.children.map(getMarkdownNodeText).join("");
 }
 
+const CLOSING_MATH_DELIMITER: Record<string, string> = {
+  "\\(": "\\)",
+  "\\[": "\\]",
+  $$: "$$",
+};
+
+function getMathFormulaProps(node: AssistantMarkdownAstNode): MathFormulaProps {
+  const content = node.content ?? "";
+  const sourceInfo = node.sourceInfo?.trim() ?? "";
+  if (node.markup.startsWith("`") || node.markup.startsWith("~")) {
+    const terminatedContent = content.endsWith("\n") ? content : `${content}\n`;
+    return {
+      expression: content.trim(),
+      source: `${node.markup}${sourceInfo}\n${terminatedContent}${node.markup}`,
+      displayMode: true,
+    };
+  }
+
+  const displayMode = node.type === "math_block";
+  const separator = displayMode ? "\n" : "";
+  return {
+    expression: content,
+    source: `${node.markup}${separator}${content}${separator}${CLOSING_MATH_DELIMITER[node.markup] ?? "$"}`,
+    displayMode,
+  };
+}
+
+function renderMathFormula(
+  node: ASTNode,
+  _children: ReactNode[],
+  _parent: ASTNode[],
+  styles: MarkdownStyles,
+) {
+  return (
+    <MathFormula
+      key={node.key}
+      {...getMathFormulaProps(node as AssistantMarkdownAstNode)}
+      textStyle={styles.text}
+    />
+  );
+}
+
 function nodeHasParentType(parent: unknown, type: string): boolean {
   if (Array.isArray(parent)) {
     return parent.some((entry) => entry?.type === type);
@@ -1451,7 +1495,8 @@ export const AssistantMessage = memo(function AssistantMessage({
   client,
   spacing = "default",
 }: AssistantMessageProps) {
-  const markdownParser = useMemo(createAssistantMarkdownParser, []);
+  const renderLatex = useSettings((settings) => settings.renderLatex);
+  const markdownParser = useMemo(() => createAssistantMarkdownParser(renderLatex), [renderLatex]);
 
   const fileLinkActions = useAssistantFileLinkActions();
   const handleMarkdownLinkPress = useStableEvent((url: string) => {
@@ -1673,6 +1718,8 @@ export const AssistantMessage = memo(function AssistantMessage({
           {"\n"}
         </MarkdownTextSpan>
       ),
+      math_inline: renderMathFormula,
+      math_block: renderMathFormula,
       code_block: (
         node: ASTNode,
         _children: ReactNode[],
