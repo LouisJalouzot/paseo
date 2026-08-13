@@ -41,6 +41,10 @@ export function ChatSection() {
     (chatOutlineEnabled: boolean) => void updateSettings({ chatOutlineEnabled }),
     [updateSettings],
   );
+  const changeRenderLatex = useCallback(
+    (renderLatex: boolean) => void updateSettings({ renderLatex }),
+    [updateSettings],
+  );
 
   return (
     <View>
@@ -65,6 +69,14 @@ export function ChatSection() {
               hint={t("settings.appearance.chatOutline.description")}
               value={settings.chatOutlineEnabled}
               onValueChange={changeChatOutline}
+            />
+          )}
+          {isNative ? null : (
+            <SettingsSwitch
+              label={t("settings.general.renderLatex.label")}
+              hint={t("settings.general.renderLatex.description")}
+              value={settings.renderLatex}
+              onValueChange={changeRenderLatex}
             />
           )}
         </SettingsCard>
