@@ -1955,6 +1955,10 @@ export const ko: TranslationResources = {
         label: "추론 항상 펼치기",
         description: "에이전트의 사고 및 추론 블록을 기본적으로 모두 펼쳐 표시합니다.",
       },
+      renderLatex: {
+        label: "LaTeX 수식 렌더링",
+        description: "KaTeX로 수식을 조판합니다. 수식을 클릭하면 원본을 볼 수 있습니다",
+      },
       toolCallDetail: {
         label: "도구 호출 표시",
         description: "타임라인에 도구 호출이 표시되는 방식",

@@ -1997,6 +1997,10 @@ export const fr: TranslationResources = {
         label: "Toujours afficher le raisonnement",
         description: "Afficher le raisonnement de l'agent entièrement développé par défaut",
       },
+      renderLatex: {
+        label: "Afficher les formules LaTeX",
+        description: "Compose les formules de l’assistant avec KaTeX ; cliquez pour voir la source",
+      },
       toolCallDetail: {
         label: "Affichage des appels d’outils",
         description: "Comment les appels d’outils apparaissent dans la chronologie",
