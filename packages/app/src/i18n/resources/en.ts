@@ -1852,6 +1852,10 @@ export const en = {
         label: "Always expand reasoning",
         description: "Show agent thinking and chain-of-thought blocks fully expanded by default",
       },
+      renderLatex: {
+        label: "Render LaTeX formulas",
+        description: "Typeset assistant math with KaTeX; click a formula to view its source",
+      },
       toolCallDetail: {
         label: "Tool call display",
         description: "How tool calls appear in the timeline",

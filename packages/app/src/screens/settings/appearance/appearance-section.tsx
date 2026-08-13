@@ -194,6 +194,28 @@ function AutoExpandReasoningRow({ value, onChange }: AutoExpandReasoningRowProps
   );
 }
 
+interface RenderLatexRowProps {
+  value: boolean;
+  onChange: (value: boolean) => void;
+}
+
+function RenderLatexRow({ value, onChange }: RenderLatexRowProps) {
+  const { t } = useTranslation();
+  return (
+    <View style={settingsStyles.row}>
+      <View style={settingsStyles.rowContent}>
+        <Text style={settingsStyles.rowTitle}>{t("settings.general.renderLatex.label")}</Text>
+        <Text style={settingsStyles.rowHint}>{t("settings.general.renderLatex.description")}</Text>
+      </View>
+      <Switch
+        value={value}
+        onValueChange={onChange}
+        accessibilityLabel={t("settings.general.renderLatex.label")}
+      />
+    </View>
+  );
+}
+
 interface ChatOutlineRowProps {
   value: boolean;
   onChange: (value: boolean) => void;
@@ -502,6 +524,13 @@ export function AppearanceSection() {
     [updateSettings],
   );
 
+  const handleRenderLatexChange = useCallback(
+    (renderLatex: boolean) => {
+      void updateSettings({ renderLatex });
+    },
+    [updateSettings],
+  );
+
   const handleToolCallDetailLevelChange = useCallback(
     (toolCallDetailLevel: AppSettings["toolCallDetailLevel"]) => {
       void updateSettings({ toolCallDetailLevel });
@@ -602,6 +631,9 @@ export function AppearanceSection() {
             value={settings.autoExpandReasoning}
             onChange={handleAutoExpandReasoningChange}
           />
+          {!isNative ? (
+            <RenderLatexRow value={settings.renderLatex} onChange={handleRenderLatexChange} />
+          ) : null}
           <ToolCallDetailRow
             value={settings.toolCallDetailLevel}
             onChange={handleToolCallDetailLevelChange}

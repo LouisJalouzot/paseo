@@ -69,6 +69,7 @@ export interface AppSettings {
   autoExpandReasoning: boolean;
   toolCallDetailLevel: ToolCallDetailLevel;
   chatOutlineEnabled: boolean;
+  renderLatex: boolean;
   vimKeybindings: boolean;
 }
 
@@ -136,6 +137,7 @@ export const DEFAULT_CLIENT_SETTINGS: AppSettings = {
   autoExpandReasoning: false,
   toolCallDetailLevel: "detailed",
   chatOutlineEnabled: true,
+  renderLatex: true,
   vimKeybindings: false,
 };
 
@@ -280,6 +282,9 @@ function pickBooleanAppSettings(stored: StoredAppSettings): Partial<AppSettings>
   }
   if (typeof stored.chatOutlineEnabled === "boolean") {
     result.chatOutlineEnabled = stored.chatOutlineEnabled;
+  }
+  if (typeof stored.renderLatex === "boolean") {
+    result.renderLatex = stored.renderLatex;
   }
   return result;
 }
