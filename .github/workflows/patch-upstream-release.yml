@@ -1,0 +1,122 @@
+name: Patch Upstream Release
+
+on:
+  schedule:
+    - cron: "17 5 * * 1"
+  workflow_dispatch:
+    inputs:
+      upstream_tag:
+        description: "Upstream release tag; empty uses the latest stable release"
+        required: false
+        type: string
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: patch-upstream-release
+  cancel-in-progress: false
+
+jobs:
+  patch-release:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Select upstream release
+        id: release
+        env:
+          REQUESTED_TAG: ${{ inputs.upstream_tag }}
+        run: |
+          tag="$REQUESTED_TAG"
+          if [[ -z "$tag" ]]; then
+            tag="$(gh api repos/getpaseo/paseo/releases/latest --jq .tag_name)"
+          fi
+          if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Invalid release tag: $tag" >&2
+            exit 1
+          fi
+          patched_tag="${tag}-patched.1"
+          echo "upstream_tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "patched_tag=$patched_tag" >> "$GITHUB_OUTPUT"
+          if git ls-remote --exit-code --tags origin "refs/tags/$patched_tag" >/dev/null 2>&1; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "$patched_tag already exists"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-node@v4
+        if: steps.release.outputs.skip == 'false'
+        with:
+          node-version: "22"
+          cache: npm
+
+      - uses: cachix/install-nix-action@v31
+        if: steps.release.outputs.skip == 'false'
+
+      - name: Create patched release branch
+        if: steps.release.outputs.skip == 'false'
+        env:
+          UPSTREAM_TAG: ${{ steps.release.outputs.upstream_tag }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote add upstream https://github.com/getpaseo/paseo.git
+          git fetch --force upstream "refs/tags/$UPSTREAM_TAG:refs/tags/$UPSTREAM_TAG"
+          upstream_commit="$(git rev-list -n 1 "$UPSTREAM_TAG")"
+          git fetch origin refs/heads/latex-v0.3.1:refs/remotes/origin/latex-v0.3.1
+          git switch --detach "$upstream_commit"
+          git switch -c "patched-$UPSTREAM_TAG"
+          git cherry-pick 57c9991ce 897c74f95 66ee44fc5
+
+      - name: Update Nix dependency hash
+        if: steps.release.outputs.skip == 'false'
+        run: |
+          ./scripts/update-nix.sh
+          git add package-lock.json nix/npm-deps.hash
+          if ! git diff --cached --quiet; then
+            git commit -m "fix(nix): update npm dependency hash"
+          fi
+
+      - name: Verify patched release
+        if: steps.release.outputs.skip == 'false'
+        run: |
+          npm ci
+          npm run build:app-deps
+          npx vitest run \
+            packages/app/src/utils/__tests__/split-markdown-blocks.test.ts \
+            packages/app/src/utils/markdown-math.test.ts \
+            packages/app/src/components/math-formula.browser.test.tsx \
+            --environment jsdom --bail=1
+          npm run typecheck --workspace=@getpaseo/app
+          nix build .#default
+
+      - name: Publish patched release
+        if: steps.release.outputs.skip == 'false'
+        env:
+          UPSTREAM_TAG: ${{ steps.release.outputs.upstream_tag }}
+          PATCHED_TAG: ${{ steps.release.outputs.patched_tag }}
+        run: |
+          git tag -a "$PATCHED_TAG" -m "Paseo $UPSTREAM_TAG with local patches"
+          old="$(git ls-remote origin refs/heads/patched-release | cut -f1)"
+          git push --atomic \
+            --force-with-lease="refs/heads/patched-release:$old" \
+            origin \
+            "HEAD:refs/heads/patched-$UPSTREAM_TAG" \
+            "refs/tags/$PATCHED_TAG" \
+            HEAD:refs/heads/patched-release
+
+      - name: Open failure issue
+        if: failure()
+        env:
+          UPSTREAM_TAG: ${{ steps.release.outputs.upstream_tag }}
+        run: |
+          gh issue create \
+            --title "Failed to patch Paseo ${UPSTREAM_TAG:-release}" \
+            --body "The automated release patch failed. Inspect run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
