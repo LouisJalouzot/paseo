@@ -1,4 +1,6 @@
-import { Text, View, type StyleProp, type TextStyle } from "react-native";
+import { useCallback, useEffect, useState } from "react";
+import { MathView } from "@dawsonxiong/react-native-latex-renderer";
+import { StyleSheet, Text, View, type StyleProp, type TextStyle } from "react-native";
 import { MarkdownTextSpan } from "./markdown-text";
 
 export interface MathFormulaProps {
@@ -8,16 +10,46 @@ export interface MathFormulaProps {
   textStyle?: StyleProp<TextStyle>;
 }
 
-export function MathFormula({ source, displayMode, textStyle }: MathFormulaProps) {
-  if (displayMode) {
-    return (
-      <View>
-        <Text selectable style={textStyle}>
-          {source}
-        </Text>
-      </View>
-    );
+export function MathFormula({ expression, source, displayMode, textStyle }: MathFormulaProps) {
+  const [failed, setFailed] = useState(false);
+  const flattenedStyle = StyleSheet.flatten(textStyle);
+  const fontSize =
+    typeof flattenedStyle?.fontSize === "number" ? flattenedStyle.fontSize : undefined;
+  const color = typeof flattenedStyle?.color === "string" ? flattenedStyle.color : undefined;
+  const handleError = useCallback(() => setFailed(true), []);
+
+  useEffect(() => setFailed(false), [expression]);
+
+  if (failed) {
+    if (displayMode) {
+      return (
+        <View>
+          <Text selectable style={textStyle}>
+            {source}
+          </Text>
+        </View>
+      );
+    }
+
+    return <MarkdownTextSpan style={textStyle}>{source}</MarkdownTextSpan>;
   }
 
-  return <MarkdownTextSpan style={textStyle}>{source}</MarkdownTextSpan>;
+  return (
+    <MathView
+      math={displayMode ? `$$${expression}$$` : `$${expression}$`}
+      fontSize={fontSize}
+      color={color}
+      onError={handleError}
+      style={displayMode ? styles.display : styles.inline}
+    />
+  );
 }
+
+const styles = StyleSheet.create({
+  display: {
+    width: "100%",
+  },
+  inline: {
+    flexShrink: 1,
+  },
+});
