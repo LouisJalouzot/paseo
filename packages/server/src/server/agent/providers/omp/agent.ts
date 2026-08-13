@@ -1959,7 +1959,7 @@ export class OmpAgentSession implements AgentSession {
     event: Extract<OmpAgentSessionEvent, { type: "message_update" }>,
     turnId: string | undefined,
   ): void {
-    if (event.message.role !== "assistant") {
+    if (!event.message || event.message.role !== "assistant") {
       return;
     }
     if (event.assistantMessageEvent.type === "text_delta") {
