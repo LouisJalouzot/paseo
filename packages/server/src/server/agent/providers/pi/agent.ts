@@ -65,6 +65,7 @@ import {
   type PiCapturedUserMessageEntry,
 } from "./history-mapper.js";
 import { materializeProviderImage } from "../provider-image-output.js";
+import { mapPiBackgroundTaskNotification } from "./background-task-notification.js";
 import { PiCliRuntime } from "./cli-runtime.js";
 import {
   createPiExtensionHost,
@@ -1414,7 +1415,12 @@ export class PiRpcAgentSession implements AgentSession {
       this.provider,
       await this.runtimeSession.getMessages(),
       this.contextUserEntries,
-      {},
+      {
+        mapCustomMessage: (text, provider) => {
+          const item = mapPiBackgroundTaskNotification(text);
+          return item ? { type: "timeline", provider, item } : null;
+        },
+      },
       // At most eight 2 MiB child files per replay; later cards retain their summaries.
       createPiExtensionHost(this.logger, undefined, 16 * 1024 * 1024),
       this.closeController.signal,
@@ -2370,15 +2376,18 @@ export class PiRpcAgentSession implements AgentSession {
       this.emitExtensionOutput(customMapping, turnId);
       const text = getUserMessageText(event.message.content);
       if (event.message.display !== false && text) {
+        const item = mapPiBackgroundTaskNotification(text);
         this.emit({
           type: "timeline",
           provider: this.provider,
           turnId,
-          item: mapCustomMessageToToolCall(
-            event.message,
-            text,
-            `${this.provider}-custom-${randomUUID()}`,
-          ),
+          item:
+            item ??
+            mapCustomMessageToToolCall(
+              event.message,
+              text,
+              `${this.provider}-custom-${randomUUID()}`,
+            ),
         });
       }
       if (!this.activeTurnStarted) {
