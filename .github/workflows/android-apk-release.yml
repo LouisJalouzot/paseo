@@ -93,26 +93,26 @@ jobs:
           cd packages/app
           APP_VARIANT=development npx expo prebuild --platform android --non-interactive
 
-      - name: Build debug APK
+      - name: Build standalone APK
         run: |
           cd packages/app/android
-          ./gradlew --no-daemon :app:assembleDebug
+          ./gradlew --no-daemon :app:assembleRelease
 
       - name: Stage APK
         id: artifact
         shell: bash
         run: |
           set -euo pipefail
-          asset_name="paseo-${RELEASE_TAG}-android-debug.apk"
+          asset_name="paseo-${RELEASE_TAG}-android.apk"
           asset_path="$RUNNER_TEMP/$asset_name"
-          cp packages/app/android/app/build/outputs/apk/debug/app-debug.apk "$asset_path"
+          cp packages/app/android/app/build/outputs/apk/release/app-release.apk "$asset_path"
           echo "asset_name=$asset_name" >> "$GITHUB_OUTPUT"
           echo "asset_path=$asset_path" >> "$GITHUB_OUTPUT"
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: paseo-${{ env.RELEASE_TAG }}-android-debug
+          name: paseo-${{ env.RELEASE_TAG }}-android
           path: ${{ steps.artifact.outputs.asset_path }}
           if-no-files-found: error
       - name: Upload APK to GitHub Release
