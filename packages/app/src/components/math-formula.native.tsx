@@ -1,8 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { MathView } from "@dawsonxiong/react-native-latex-renderer";
-import { StyleSheet, Text, View, type StyleProp, type TextStyle } from "react-native";
+import { Text, View, type StyleProp, type TextStyle } from "react-native";
+import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { resolvePlainMarkdownTextStyle } from "./markdown-text-style";
 import { MarkdownTextSpan } from "./markdown-text";
+
+const ThemedMathView = withUnistyles(MathView, (theme) => ({
+  color: theme.colors.foreground,
+}));
 
 export interface MathFormulaProps {
   expression: string;
@@ -15,7 +20,6 @@ export function MathFormula({ expression, source, displayMode, textStyle }: Math
   const [failed, setFailed] = useState(false);
   const resolvedStyle = resolvePlainMarkdownTextStyle(textStyle);
   const fontSize = typeof resolvedStyle.fontSize === "number" ? resolvedStyle.fontSize : undefined;
-  const color = typeof resolvedStyle.color === "string" ? resolvedStyle.color : undefined;
   const handleError = useCallback(() => setFailed(true), []);
 
   useEffect(() => setFailed(false), [expression]);
@@ -35,10 +39,9 @@ export function MathFormula({ expression, source, displayMode, textStyle }: Math
   }
 
   return (
-    <MathView
+    <ThemedMathView
       math={displayMode ? `$$${expression}$$` : `$${expression}$`}
       fontSize={fontSize}
-      color={color}
       onError={handleError}
       style={displayMode ? styles.display : styles.inline}
     />
