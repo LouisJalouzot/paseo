@@ -87,11 +87,25 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
+      - name: Prepare Android notification credentials
+        env:
+          GOOGLE_SERVICES_DEBUG_JSON: ${{ secrets.GOOGLE_SERVICES_DEBUG_JSON }}
+        run: |
+          set -euo pipefail
+          if [[ -n "$GOOGLE_SERVICES_DEBUG_JSON" ]]; then
+            mkdir -p packages/app/.secrets
+            printf '%s' "$GOOGLE_SERVICES_DEBUG_JSON" > packages/app/.secrets/google-services.debug.json
+          fi
+
       - name: Generate Android project
+        env:
+          APP_VARIANT: development
+          EXPO_PROJECT_ID: ${{ vars.EXPO_PROJECT_ID }}
+          EXPO_OWNER: ${{ vars.EXPO_OWNER }}
         run: |
           npm run build:app-deps
           cd packages/app
-          APP_VARIANT=development npx expo prebuild --platform android --non-interactive
+          npx expo prebuild --platform android --non-interactive
 
       - name: Build standalone APK
         run: |

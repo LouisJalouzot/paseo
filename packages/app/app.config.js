@@ -95,7 +95,7 @@ const nativeReleaseVersion = getNativeReleaseVersion(pkg.version);
 export default {
   expo: {
     name: variant.name,
-    slug: "voice-mobile",
+    slug: process.env.EXPO_SLUG ?? "voice-mobile",
     version: nativeReleaseVersion.appVersion,
     orientation: "portrait",
     icon: "./assets/images/icon.png",
@@ -184,9 +184,9 @@ export default {
       profileBuild: isProfileBuild,
       router: {},
       eas: {
-        projectId: "0e7f65ce-0367-46c8-a238-2b65963d235a",
+        projectId: process.env.EXPO_PROJECT_ID ?? "0e7f65ce-0367-46c8-a238-2b65963d235a",
       },
     },
-    owner: "getpaseo",
+    owner: process.env.EXPO_OWNER ?? "getpaseo",
   },
 };
