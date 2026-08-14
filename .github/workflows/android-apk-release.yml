@@ -102,6 +102,7 @@ jobs:
           APP_VARIANT: development
           EXPO_PROJECT_ID: ${{ vars.EXPO_PROJECT_ID }}
           EXPO_OWNER: ${{ vars.EXPO_OWNER }}
+          EXPO_SLUG: paseo-debug
         run: |
           npm run build:app-deps
           cd packages/app
