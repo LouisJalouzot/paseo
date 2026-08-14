@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { MathView } from "@dawsonxiong/react-native-latex-renderer";
 import { StyleSheet, Text, View, type StyleProp, type TextStyle } from "react-native";
+import { resolvePlainMarkdownTextStyle } from "./markdown-text-style";
 import { MarkdownTextSpan } from "./markdown-text";
 
 export interface MathFormulaProps {
@@ -12,10 +13,9 @@ export interface MathFormulaProps {
 
 export function MathFormula({ expression, source, displayMode, textStyle }: MathFormulaProps) {
   const [failed, setFailed] = useState(false);
-  const flattenedStyle = StyleSheet.flatten(textStyle);
-  const fontSize =
-    typeof flattenedStyle?.fontSize === "number" ? flattenedStyle.fontSize : undefined;
-  const color = typeof flattenedStyle?.color === "string" ? flattenedStyle.color : undefined;
+  const resolvedStyle = resolvePlainMarkdownTextStyle(textStyle);
+  const fontSize = typeof resolvedStyle.fontSize === "number" ? resolvedStyle.fontSize : undefined;
+  const color = typeof resolvedStyle.color === "string" ? resolvedStyle.color : undefined;
   const handleError = useCallback(() => setFailed(true), []);
 
   useEffect(() => setFailed(false), [expression]);

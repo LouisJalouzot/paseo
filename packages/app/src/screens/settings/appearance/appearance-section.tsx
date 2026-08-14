@@ -651,9 +651,7 @@ export function AppearanceSection() {
             value={settings.autoExpandReasoning}
             onChange={handleAutoExpandReasoningChange}
           />
-          {!isNative ? (
-            <RenderLatexRow value={settings.renderLatex} onChange={handleRenderLatexChange} />
-          ) : null}
+          <RenderLatexRow value={settings.renderLatex} onChange={handleRenderLatexChange} />
           <ToolCallDetailRow
             value={settings.toolCallDetailLevel}
             onChange={handleToolCallDetailLevelChange}
