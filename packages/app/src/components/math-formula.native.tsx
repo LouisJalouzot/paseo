@@ -4,9 +4,9 @@ import { Text, View, type StyleProp, type TextStyle } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { resolvePlainMarkdownTextStyle } from "./markdown-text-style";
 import { MarkdownTextSpan } from "./markdown-text";
-
 const ThemedMathView = withUnistyles(MathView, (theme) => ({
   color: theme.colors.foreground,
+  key: theme.colors.foreground,
 }));
 
 export interface MathFormulaProps {
