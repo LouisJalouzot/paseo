@@ -214,5 +214,6 @@ test("Pi import config preserves thinking before a later model in large sessions
   expect(importConfig).toEqual({
     model: "openrouter/google/gemini-2.5-pro",
     thinkingOptionId: "low",
+    title: "large session",
   });
 });
