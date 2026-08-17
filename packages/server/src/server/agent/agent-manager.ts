@@ -590,15 +590,19 @@ function resolveImportedAgentTitle(
   config: AgentSessionConfig,
   timelineRows: readonly AgentTimelineRow[],
 ): string | null {
-  const initialPrompt = getFirstUserMessageTextFromRows(timelineRows);
-  if (!initialPrompt) {
-    return null;
-  }
   const { explicitTitle, provisionalTitle } = resolveCreateAgentTitles({
     configTitle: config.title,
-    initialPrompt,
+    initialPrompt: getFirstUserMessageTextFromRows(timelineRows),
   });
   return explicitTitle ?? provisionalTitle ?? null;
+}
+
+function readRuntimeSessionName(info?: AgentRuntimeInfo): string | null | undefined {
+  const value = info?.extra?.sessionName;
+  if (typeof value === "string") {
+    return value.trim() || null;
+  }
+  return value === null ? null : undefined;
 }
 
 function getFirstUserMessageTextFromRows(rows: readonly AgentTimelineRow[]): string | null {
@@ -1753,8 +1757,63 @@ export class AgentManager {
     ) {
       return;
     }
+    await this.syncSessionNameFromPaseo(agent, normalizedTitle);
     this.touchUpdatedAt(agent);
     await this.persistSnapshot(agent, { title: normalizedTitle });
+    this.emitState(agent, { persist: false });
+  }
+
+  private async syncSessionNameFromPaseo(
+    agent: ActiveManagedAgent,
+    title: string | null,
+  ): Promise<void> {
+    const normalizedTitle = title?.trim();
+    const setSessionName = agent.session.setSessionName;
+    if (
+      !normalizedTitle ||
+      !setSessionName ||
+      readRuntimeSessionName(agent.runtimeInfo) === normalizedTitle
+    ) {
+      return;
+    }
+
+    try {
+      await setSessionName.call(agent.session, normalizedTitle);
+      this.setRuntimeSessionName(agent, normalizedTitle);
+    } catch (error) {
+      this.logger.warn(
+        { err: error, agentId: agent.id, title: normalizedTitle },
+        "Failed to synchronize Paseo title to provider session",
+      );
+    }
+  }
+
+  private setRuntimeSessionName(agent: ActiveManagedAgent, name: string | null): void {
+    if (!agent.runtimeInfo) {
+      return;
+    }
+    agent.runtimeInfo = {
+      ...agent.runtimeInfo,
+      extra: {
+        ...agent.runtimeInfo.extra,
+        sessionName: name,
+      },
+    };
+  }
+
+  private async applyProviderSessionName(
+    agent: ActiveManagedAgent,
+    name: string | undefined,
+  ): Promise<void> {
+    const normalizedName = name?.trim() || null;
+    this.setRuntimeSessionName(agent, normalizedName);
+    const stored = await this.registry?.get(agent.id);
+    if ((stored?.title ?? null) === normalizedName) {
+      return;
+    }
+
+    this.touchUpdatedAt(agent);
+    await this.persistSnapshot(agent, { title: normalizedName });
     this.emitState(agent, { persist: false });
   }
 
@@ -2928,12 +2987,6 @@ export class AgentManager {
       if (this.agents.has(resolvedAgentId)) {
         throw new Error(`Agent with id ${resolvedAgentId} already exists`);
       }
-      const initialPersistedTitle = await this.resolveInitialPersistedTitle(
-        resolvedAgentId,
-        config,
-        options?.initialTitle ?? null,
-      );
-
       const now = new Date();
       const { durableTimelineHasRows } = await this.initializeAgentTimelineForRegister({
         agentId: resolvedAgentId,
@@ -2956,6 +3009,13 @@ export class AgentManager {
       // Initialize previousStatus to track transitions
       this.previousStatuses.set(resolvedAgentId, managed.lifecycle);
       await this.refreshRuntimeInfo(managed, { emit: false });
+      const initialPersistedTitle = await this.resolveInitialPersistedTitle(
+        resolvedAgentId,
+        config,
+        options?.initialTitle ?? null,
+        readRuntimeSessionName(managed.runtimeInfo),
+      );
+      await this.syncSessionNameFromPaseo(managed, initialPersistedTitle);
       this.assertAgentRegistrationActive(managed);
       await this.persistSnapshot(managed, {
         title: initialPersistedTitle,
@@ -3263,6 +3323,10 @@ export class AgentManager {
     agent: ActiveManagedAgent,
     event: AgentStreamEvent,
   ): Promise<void> {
+    if (event.type === "session_name_changed") {
+      await this.applyProviderSessionName(agent, event.name);
+      return;
+    }
     if (event.type === "provider_subagent") {
       const update = this.providerSubagents.apply(agent.id, event.provider, event.event);
       this.dispatch({ type: "provider_subagent", event: update });
@@ -3309,7 +3373,12 @@ export class AgentManager {
     agentId: string,
     config: AgentSessionConfig,
     fallbackTitle: string | null,
+    providerTitle?: string | null,
   ): Promise<string | null> {
+    const normalizedProviderTitle = providerTitle?.trim();
+    if (normalizedProviderTitle) {
+      return normalizedProviderTitle;
+    }
     const existing = await this.registry?.get(agentId);
     if (existing) {
       return existing.title ?? null;

@@ -53,6 +53,7 @@ interface PiSessionHead {
 interface PiSessionDescriptor {
   cwd: string;
   title: string | null;
+  sessionName: string | null;
   firstUserMessage: string | null;
   lastUserMessage: string | null;
   lastActivityAt: Date;
@@ -67,6 +68,7 @@ interface RankedSessionFile {
 export interface PiImportSessionConfig {
   model?: string;
   thinkingOptionId?: string;
+  title?: string;
 }
 
 export async function listPiImportableSessions(
@@ -237,7 +239,8 @@ async function readPiSessionDescriptor(filePath: string): Promise<PiSessionDescr
   const tail = await readTail(filePath).catch(() => "");
   const tailInfo = parseSessionTail(tail);
   const headInfo = parseSessionHeadFromChunk(headChunk);
-  const title = tailInfo.title ?? headInfo.title ?? headInfo.firstUserMessage;
+  const sessionName = tailInfo.title ?? headInfo.title;
+  const title = sessionName ?? headInfo.firstUserMessage;
   const model = tailInfo.model ?? headInfo.model;
   const thinkingOptionId = tailInfo.thinkingOptionId ?? headInfo.thinkingOptionId;
   const lastActivityAt =
@@ -246,6 +249,7 @@ async function readPiSessionDescriptor(filePath: string): Promise<PiSessionDescr
   return {
     cwd: header.cwd,
     title,
+    sessionName,
     firstUserMessage: headInfo.firstUserMessage,
     lastUserMessage: tailInfo.lastUserMessage,
     lastActivityAt,
@@ -258,6 +262,7 @@ function toPiImportSessionConfig(descriptor: PiSessionDescriptor): PiImportSessi
   return {
     ...(descriptor.model ? { model: descriptor.model } : {}),
     ...(descriptor.thinkingOptionId ? { thinkingOptionId: descriptor.thinkingOptionId } : {}),
+    ...(descriptor.sessionName ? { title: descriptor.sessionName } : {}),
   };
 }
 

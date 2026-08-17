@@ -1392,6 +1392,7 @@ export class PiRpcAgentSession implements AgentSession {
         this.state.thinkingLevel,
       ),
       modeId: this.currentModeId,
+      extra: { sessionName: this.state.sessionName ?? null },
     };
   }
 
@@ -1405,6 +1406,15 @@ export class PiRpcAgentSession implements AgentSession {
 
   async setMode(_modeId: string): Promise<void | AgentProviderNotice> {
     throw new Error("Pi does not expose selectable modes");
+  }
+
+  async setSessionName(name: string): Promise<void> {
+    const normalizedName = name.trim();
+    if (!normalizedName) {
+      throw new Error("Pi session name cannot be empty");
+    }
+    await this.runtimeSession.request({ type: "set_session_name", name: normalizedName });
+    this.state = { ...this.state, sessionName: normalizedName };
   }
 
   getPendingPermissions(): AgentPermissionRequest[] {
@@ -2021,6 +2031,19 @@ export class PiRpcAgentSession implements AgentSession {
     }
     if (event.type === "command_output") {
       this.handleCommandOutput(event.text);
+      return;
+    }
+    if (event.type === "session_info_changed") {
+      const name =
+        "name" in event && typeof event.name === "string"
+          ? event.name.trim() || undefined
+          : undefined;
+      this.state = { ...this.state, sessionName: name };
+      this.emit({
+        type: "session_name_changed",
+        provider: this.provider,
+        name,
+      });
       return;
     }
     if (event.type === "prompt_result") {
