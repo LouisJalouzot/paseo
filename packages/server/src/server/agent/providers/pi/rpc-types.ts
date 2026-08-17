@@ -213,6 +213,10 @@ export type PiRuntimeEvent =
       text?: string;
     }
   | {
+      type: "session_info_changed";
+      name?: string;
+    }
+  | {
       type: "process_exit";
       error: string;
     }
