@@ -48,6 +48,22 @@ test("emits beta release info from tags", () => {
   });
 });
 
-test("rejects non-beta prerelease versions", () => {
-  assert.throws(() => parseReleaseVersion("0.1.60-canary.1"), /Expected beta prerelease versions/);
+test("parses patched release metadata as a stable release", () => {
+  assert.deepEqual(getReleaseInfoFromSourceTag("v0.3.1-patched.3"), {
+    sourceTag: "v0.3.1-patched.3",
+    releaseTag: "v0.3.1-patched.3",
+    version: "0.3.1-patched.3",
+    baseVersion: "0.3.1",
+    prerelease: "patched.3",
+    isPrerelease: false,
+    isBeta: false,
+    betaNumber: null,
+    releaseType: "release",
+    releaseChannel: "latest",
+    isSmokeTag: false,
+  });
+});
+
+test("rejects unsupported prerelease versions", () => {
+  assert.throws(() => parseReleaseVersion("0.1.60-canary.1"), /Expected beta or patched versions/);
 });

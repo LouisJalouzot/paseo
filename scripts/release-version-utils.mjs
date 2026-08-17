@@ -23,11 +23,15 @@ export function parseReleaseVersion(version) {
   const patch = Number.parseInt(match.groups.patch, 10);
   const prerelease = match.groups.prerelease ?? null;
   const betaMatch = prerelease?.match(/^beta\.(?<beta>\d+)$/) ?? null;
+  const patchedMatch = prerelease?.match(/^patched\.(?<patched>\d+)$/) ?? null;
   const betaNumber = betaMatch?.groups?.beta ? Number.parseInt(betaMatch.groups.beta, 10) : null;
+  const patchedNumber = patchedMatch?.groups?.patched
+    ? Number.parseInt(patchedMatch.groups.patched, 10)
+    : null;
 
-  if (prerelease !== null && betaNumber === null) {
+  if (prerelease !== null && betaNumber === null && patchedNumber === null) {
     throw new Error(
-      `Unsupported release version "${version}". Expected beta prerelease versions like 0.1.41-beta.1.`,
+      `Unsupported release version "${version}". Expected beta or patched versions like 0.1.41-beta.1 or 0.3.1-patched.3.`,
     );
   }
 
@@ -37,6 +41,9 @@ export function parseReleaseVersion(version) {
   if (betaNumber !== null) {
     assertInteger(betaNumber, "beta number");
   }
+  if (patchedNumber !== null) {
+    assertInteger(patchedNumber, "patched revision");
+  }
 
   return {
     version: trimmed,
@@ -45,7 +52,7 @@ export function parseReleaseVersion(version) {
     patch,
     prerelease,
     baseVersion: `${major}.${minor}.${patch}`,
-    isPrerelease: prerelease !== null,
+    isPrerelease: betaNumber !== null,
     isBeta: betaNumber !== null,
     betaNumber,
   };

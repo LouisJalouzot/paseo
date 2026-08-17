@@ -17,7 +17,7 @@ on:
 
 jobs:
   deploy:
-    if: ${{ github.event_name != 'release' || (!github.event.release.prerelease && !github.event.release.draft) }}
+    if: ${{ github.event_name != 'release' || (!github.event.release.prerelease && !github.event.release.draft && !contains(github.event.release.tag_name, '-patched.')) }}
     runs-on: ubuntu-latest
 
     steps:

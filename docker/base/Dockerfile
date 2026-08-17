@@ -12,7 +12,12 @@ COPY . .
 
 RUN set -eux; \
     if [ -n "${PASEO_VERSION:-}" ]; then \
-      test "$(node -p "require('./package.json').version")" = "${PASEO_VERSION}"; \
+      package_version="$(node -p "require('./package.json').version")"; \
+      base_version="${PASEO_VERSION%-patched.*}"; \
+      if [ "${package_version}" != "${PASEO_VERSION}" ] && [ "${package_version}" != "${base_version}" ]; then \
+        echo "Expected package version ${PASEO_VERSION} (or ${base_version}), got ${package_version}" >&2; \
+        exit 1; \
+      fi; \
     fi; \
     node -e 'const fs=require("node:fs"); const pkg=JSON.parse(fs.readFileSync("package.json","utf8")); delete pkg.scripts.prepare; fs.writeFileSync("package.json", `${JSON.stringify(pkg)}\n`);'; \
     npm ci
