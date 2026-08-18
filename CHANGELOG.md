@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.4.0-patched.1
+
+### Added
+
+- Render assistant LaTeX with streamed display-math grouping, native MathML on web and Electron, a raw-LaTeX fallback, and an Appearance setting ([57c9991](https://github.com/LouisJalouzot/paseo/commit/57c9991ce))
+- Show Pi background-task notifications as structured task timeline items ([66ee44f](https://github.com/LouisJalouzot/paseo/commit/66ee44fc5))
+- Synchronize Pi runtime session names with Paseo titles ([e0102c8](https://github.com/LouisJalouzot/paseo/commit/e0102c8a7))
+
+### Fixed
+
+- Send push notifications when a mobile client is backgrounded and cannot render the in-app attention event ([32ae66e](https://github.com/LouisJalouzot/paseo/commit/32ae66e3f))
+- Ignore malformed OMP message updates that omit their message ([897c74f](https://github.com/LouisJalouzot/paseo/commit/897c74f95))
+
 ## 0.4.0 - 2026-08-13
 
 ### Breaking
