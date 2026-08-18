@@ -96,10 +96,31 @@ jobs:
 
           git remote add upstream https://github.com/getpaseo/paseo.git
           git fetch --force upstream "refs/tags/$UPSTREAM_TAG:refs/tags/$UPSTREAM_TAG"
-          git fetch origin refs/heads/latex-v0.3.1:refs/remotes/origin/latex-v0.3.1
+          git fetch --force origin refs/heads/patched-release:refs/remotes/origin/patched-release
           git switch --detach "$(git rev-list -n 1 "$UPSTREAM_TAG")"
           git switch -c "patched-$UPSTREAM_TAG"
-          git cherry-pick 57c9991ce 897c74f95 66ee44fc5
+
+          # Keep this list in release order. Rebase the series manually when an
+          # upstream release changes a patched file, then update these SHAs.
+          patch_commits=(
+            df9706a4d # LaTeX, rebased onto v0.4.0
+            35730e9ee # LaTeX settings schema compatibility
+            e2cfba71f # OMP guard, rebased onto v0.4.0
+            73a46f8c3 # Pi background-task notifications, rebased onto v0.4.0
+            3512e4587 # Pi session names, rebased onto v0.4.0
+            c32533c53 # Backgrounded mobile push routing, rebased onto v0.4.0
+          )
+          for patch in "${patch_commits[@]}"; do
+            if ! git cat-file -e "$patch^{commit}"; then
+              echo "::error::Maintained patch $patch is missing from origin/patched-release" >&2
+              exit 1
+            fi
+            if ! git cherry-pick "$patch"; then
+              echo "::error::Patch $patch conflicts with $UPSTREAM_TAG; resolve the patch series and update patch_commits" >&2
+              git status --short
+              exit 1
+            fi
+          done
 
       - name: Update Nix dependency hash
         if: steps.release.outputs.skip == 'false' && steps.release.outputs.source_exists == 'false'
@@ -198,11 +219,29 @@ jobs:
           fi
           gh release upload "$PATCHED_TAG" "${files[@]}" --clobber
 
-      - name: Open failure issue
+      - name: Summarize release failure
         if: failure()
+        continue-on-error: true
         env:
           UPSTREAM_TAG: ${{ steps.release.outputs.upstream_tag }}
         run: |
-          gh issue create \
-            --title "Failed to patch Paseo ${UPSTREAM_TAG:-release}" \
-            --body "The automated release patch failed. Inspect run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          {
+            echo "## Patched release failed"
+            echo
+            echo "Upstream tag: ${UPSTREAM_TAG:-unknown}"
+            echo "Run: $run_url"
+            echo
+            echo "### Checkout status"
+            echo '```text'
+            git status --short || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if gh api "repos/$GITHUB_REPOSITORY" --jq '.has_issues' | grep -qx true; then
+            gh issue create \
+              --title "Failed to patch Paseo ${UPSTREAM_TAG:-release}" \
+              --body "The automated release patch failed. Inspect run: $run_url"
+          else
+            echo "::warning::GitHub Issues are disabled; failure details are in the job summary: $run_url"
+          fi
