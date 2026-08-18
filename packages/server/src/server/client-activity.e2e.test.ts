@@ -21,9 +21,10 @@ class RecordingPushNotificationSender implements PushNotificationSender {
  * We want to notify them where they'll see it.
  *
  * Rules:
- * 1. If a present client is focused on the agent → no notification
- * 2. Otherwise, notify the most recently active present client
- * 3. If no client is present → send push for non-error attention
+ * 1. If a present, visible client is focused on the agent → no notification
+ * 2. Backgrounded mobile clients are not in-app recipients; use push instead
+ * 3. Otherwise, notify the most recently active present client
+ * 4. If no client is present → send push for non-error attention
  *
  * Heartbeat contains:
  * - deviceType: "web" | "mobile"
@@ -481,7 +482,7 @@ describe("client activity tracking", () => {
       expect(attention2.shouldNotify).toBe(false);
     }, 120000);
 
-    test("notify mobile only when web is stale and mobile is present", async () => {
+    test("pushes when web is stale and mobile is backgrounded", async () => {
       client1 = await createClient(); // web
       client2 = await createClient(); // mobile
 
@@ -498,7 +499,7 @@ describe("client activity tracking", () => {
         appVisible: true,
       });
 
-      // Mobile: present but not focused on the agent
+      // Mobile: backgrounded and unable to render an in-app notification
       client2.sendHeartbeat({
         deviceType: "mobile",
         focusedAgentId: null,
@@ -515,8 +516,8 @@ describe("client activity tracking", () => {
       const [attention1, attention2] = await Promise.all([attention1Promise, attention2Promise]);
 
       expect(attention1.shouldNotify).toBe(false);
-      expect(attention2.shouldNotify).toBe(true);
-      expect(pushNotifications.sent).toEqual([]);
+      expect(attention2.shouldNotify).toBe(false);
+      expect(pushNotifications.sent).toHaveLength(1);
     }, 120000);
 
     test("notify web when user active on web but looking at different agent", async () => {

@@ -8,6 +8,7 @@ import {
 
 function state(overrides: Partial<ClientPresenceState>): ClientPresenceState {
   return {
+    deviceType: "web",
     appVisible: true,
     focusedAgentId: null,
     focusedTerminalId: null,
@@ -72,6 +73,23 @@ describe("computeNotificationPlan", () => {
         nowMs,
       }),
     ).toEqual({ inAppRecipientIndex: 0, shouldPush: false });
+  });
+
+  it("pushes when the only present client is a backgrounded mobile app", () => {
+    expect(
+      computeNotificationPlan({
+        allStates: [
+          state({
+            deviceType: "mobile",
+            appVisible: false,
+            lastActivityAtMs: presentAtMs,
+          }),
+        ],
+        focusTarget: { kind: "agent", id: "agent-1" },
+        pushEligible: true,
+        nowMs,
+      }),
+    ).toEqual({ inAppRecipientIndex: null, shouldPush: true });
   });
 
   it("treats present clients focused on different agents as eligible", () => {
@@ -171,7 +189,11 @@ describe("computeNotificationPlan", () => {
       computeNotificationPlan({
         allStates: [
           state({ focusedAgentId: "agent-2", lastActivityAtMs: nowMs - 20_000 }),
-          state({ focusedAgentId: null, lastActivityAtMs: nowMs - 500 }),
+          state({
+            deviceType: "mobile",
+            focusedAgentId: null,
+            lastActivityAtMs: nowMs - 500,
+          }),
         ],
         focusTarget: { kind: "agent", id: "agent-1" },
         pushEligible: true,
