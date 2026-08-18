@@ -3,6 +3,7 @@ import type { AgentAttentionReason } from "@getpaseo/protocol/agent-attention-no
 export const PRESENCE_THRESHOLD_MS = 180_000;
 
 export interface ClientPresenceState {
+  deviceType: "web" | "mobile";
   appVisible: boolean;
   lastActivityAtMs: number | null;
   focusedAgentId: string | null;
@@ -54,7 +55,8 @@ export function computeNotificationPlan({
     const isPresent =
       clampedActivityAtMs !== null && nowMs - clampedActivityAtMs <= PRESENCE_THRESHOLD_MS;
 
-    if (!isPresent) {
+    // Backgrounded mobile clients cannot render the in-app event; use push instead.
+    if (!isPresent || (state.deviceType === "mobile" && !state.appVisible)) {
       continue;
     }
 
