@@ -1029,12 +1029,13 @@ function renderMathFormula(
   _children: ReactNode[],
   _parent: ASTNode[],
   styles: MarkdownStyles,
+  inheritedStyles: TextStyle = {},
 ) {
   return (
     <MathFormula
       key={node.key}
       {...getMathFormulaProps(node as AssistantMarkdownAstNode)}
-      textStyle={styles.text}
+      textStyle={[inheritedStyles, styles.text]}
     />
   );
 }
