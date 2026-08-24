@@ -88,6 +88,7 @@ import {
   type PiToolResult,
   type PiTrackedToolCall,
 } from "./tool-call-mapper.js";
+import { mapPiTodoToolResult } from "./todo-mapper.js";
 
 const PI_PROVIDER = "pi";
 const DEFAULT_PI_THINKING_LEVEL: PiThinkingLevel = "medium";
@@ -1231,6 +1232,10 @@ export class PiRpcAgentSession implements AgentSession {
 
   private readonly subscribers = new Set<(event: AgentStreamEvent) => void>();
   private readonly activeToolCalls = new Map<string, PiTrackedToolCall>();
+  private readonly piSubagentStatuses = new Map<
+    string,
+    "running" | "completed" | "failed" | "canceled"
+  >();
   private readonly pendingExtensionUiRequests = new Map<string, AgentPermissionRequest>();
   private activeAskUserDialog: ActiveAskUserDialog | null = null;
   private pendingCombinedAskUserResponse: PendingCombinedAskUserResponse | null = null;
@@ -1566,6 +1571,7 @@ export class PiRpcAgentSession implements AgentSession {
         }
       }
       await this.runtimeSession.abort();
+      this.terminalizeActivePiSubagents("canceled", "Interrupted");
     } catch (error) {
       const terminalError = this.interruptingTurn === interruption ? interruption?.error : null;
       if (this.interruptingTurn === interruption) {
@@ -2193,6 +2199,7 @@ export class PiRpcAgentSession implements AgentSession {
   }
 
   private handleProcessExit(error: string): void {
+    this.terminalizeActivePiSubagents("failed", error);
     this.rejectAllExtensionResults(new Error(error));
     this.interruptingTurn = null;
     if (!this.activeTurnId && !this.activeTurnStarted) {
@@ -2255,6 +2262,7 @@ export class PiRpcAgentSession implements AgentSession {
         this.handleMessageUpdate(event, turnId);
         return;
       case "tool_execution_start": {
+        this.piSubagentStatuses.delete(event.toolCallId);
         const toolCall = parseToolArgs(event.toolName, event.args);
         this.activeToolCalls.set(event.toolCallId, toolCall);
         this.activeAskUserDialog = readActiveAskUserDialog(event.toolName, event.args);
@@ -2349,7 +2357,18 @@ export class PiRpcAgentSession implements AgentSession {
     const result = parseToolResult(event.result);
     const error = event.isError ? event.result : null;
     const status = event.isError ? "failed" : "completed";
-    this.emitToolCallEvent(event.toolCallId, toolCall, status, result, error);
+    const emitted = this.emitToolCallEvent(event.toolCallId, toolCall, status, result, error);
+    if (!emitted && event.toolName === "todo" && !event.isError) {
+      const item = mapPiTodoToolResult(result);
+      if (item) {
+        this.emit({
+          type: "timeline",
+          provider: this.provider,
+          turnId: this.currentTurnIdForEvent(),
+          item,
+        });
+      }
+    }
   }
 
   private emitCompactionTimeline(input: {
@@ -2458,10 +2477,17 @@ export class PiRpcAgentSession implements AgentSession {
     error: unknown,
   ): boolean {
     const turnId = this.currentTurnIdForEvent();
-    const detail = this.mapToolDetail(toolCallId, toolCall, result);
+    const detail = this.mapToolDetail(
+      toolCallId,
+      toolCall,
+      result,
+      status === "failed",
+      status === "running",
+    );
     if (!detail) {
       return false;
     }
+    this.emitPiSubagentEvent(toolCallId, detail, status);
     const baseItem = {
       type: "tool_call" as const,
       callId: toolCallId,
@@ -2483,8 +2509,72 @@ export class PiRpcAgentSession implements AgentSession {
     _toolCallId: string,
     toolCall: PiTrackedToolCall,
     result: PiToolResult,
+    isError?: boolean,
+    isRunning?: boolean,
   ): ToolCallDetail | null {
-    return mapToolDetail(toolCall, result);
+    return mapToolDetail(toolCall, result, isError, isRunning);
+  }
+
+  private emitPiSubagentEvent(
+    toolCallId: string,
+    detail: ToolCallDetail,
+    status: "running" | "completed" | "failed" | "canceled",
+  ): void {
+    if (detail.type !== "sub_agent") {
+      return;
+    }
+
+    const previousStatus = this.piSubagentStatuses.get(toolCallId);
+    if (previousStatus && previousStatus !== "running") {
+      return;
+    }
+    this.piSubagentStatuses.set(toolCallId, status);
+
+    // ponytail: one provider row per Pi subagent tool call; split fan-out when Pi exposes child IDs.
+    const id = `pi-subagent:${toolCallId}`;
+    this.emit({
+      type: "provider_subagent",
+      provider: this.provider,
+      event: {
+        type: "upsert",
+        id,
+        title: detail.subAgentType ?? "Pi subagent",
+        description: detail.description ?? null,
+        status,
+        toolCallId,
+        cwd: this.config.cwd,
+      },
+    });
+
+    const log = detail.log.trim();
+    if (status === "running" || status === "canceled" || !log) {
+      return;
+    }
+    this.emit({
+      type: "provider_subagent",
+      provider: this.provider,
+      event: {
+        type: "timeline",
+        id,
+        item:
+          status === "failed"
+            ? { type: "error", message: log }
+            : { type: "assistant_message", text: log },
+      },
+    });
+  }
+
+  private terminalizeActivePiSubagents(
+    status: "failed" | "canceled",
+    message: string,
+  ): void {
+    for (const [toolCallId, toolCall] of this.activeToolCalls) {
+      const detail = this.mapToolDetail(toolCallId, toolCall, null);
+      if (detail?.type !== "sub_agent") {
+        continue;
+      }
+      this.emitPiSubagentEvent(toolCallId, { ...detail, log: message }, status);
+    }
   }
 
   private completeTurn(turnId: string | undefined, messages: PiAgentMessage[]): void {

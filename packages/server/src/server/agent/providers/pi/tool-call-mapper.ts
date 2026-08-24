@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import type { ToolCallDetail } from "../../agent-sdk-types.js";
+import { canMapPiTodoToolResult } from "./todo-mapper.js";
 
 interface BashToolInput {
   command: string;
@@ -337,8 +338,34 @@ export function resolveToolCallName(toolCall: PiTrackedToolCall, result?: PiTool
   return toolCall.toolName;
 }
 
-export function mapToolDetail(toolCall: PiTrackedToolCall, result?: PiToolResult): ToolCallDetail {
+export function mapToolDetail(
+  toolCall: PiTrackedToolCall,
+  result?: PiToolResult,
+  isError?: boolean,
+  isRunning?: boolean,
+): ToolCallDetail | null {
   const parsedResult = result ?? null;
+
+  if (toolCall.toolName === "todo" && !isError) {
+    // Successful todo calls are rendered as TodoListCard timeline items by
+    // the agent layer (see agent.ts), not as tool-call cards. While a call
+    // is still running, a null result means "no snapshot yet" — keep
+    // suppressing it too. Once the call is terminal, though, a null result
+    // means Pi produced no parseable snapshot, so fall back to an unknown
+    // tool-call card so the operation stays visible instead of silently
+    // disappearing.
+    if (canMapPiTodoToolResult(parsedResult)) {
+      return null;
+    }
+    if (parsedResult === null && isRunning) {
+      return null;
+    }
+    return {
+      type: "unknown",
+      input: toolCall.args,
+      output: parsedResult,
+    };
+  }
 
   if (isTaskToolCall(toolCall)) {
     return mapTaskToolDetail(toolCall.args, parsedResult);

@@ -1,5 +1,6 @@
 import type { AgentStreamEvent, AgentTimelineItem, ToolCallDetail } from "../../agent-sdk-types.js";
 import type { PiAgentMessage, PiImageContent, PiTextContent } from "./rpc-types.js";
+import { mapPiTodoToolResult } from "./todo-mapper.js";
 import {
   extractTextFromToolResult,
   mapToolDetail,
@@ -78,10 +79,7 @@ export class PiHistoryMapper {
           events.push(...this.mapAssistantMessage(message));
           break;
         case "toolResult": {
-          const event = this.mapToolResultMessage(message);
-          if (event) {
-            events.push(event);
-          }
+          events.push(...this.mapToolResultMessage(message));
           break;
         }
         case "bashExecution":
@@ -159,7 +157,13 @@ export class PiHistoryMapper {
       if (content.type === "toolCall") {
         const tracked = parseToolArgs(content.name, content.arguments);
         this.pendingToolCalls.set(content.id, tracked);
-        const detail = this.mapToolDetail(content.id, tracked, null);
+        const callId = this.resolveToolCallId(content.id, tracked);
+        // The tool call itself is still running at replay time; a null todo
+        // result here must stay suppressed until the paired toolResult below.
+        const detail = this.mapToolDetail(content.id, tracked, null, undefined, true);
+        if (detail?.type === "sub_agent") {
+          events.push(this.subagentUpsert(callId, detail, "running"));
+        }
         if (!detail) {
           continue;
         }
@@ -168,7 +172,7 @@ export class PiHistoryMapper {
           provider: this.provider,
           item: {
             type: "tool_call",
-            callId: this.resolveToolCallId(content.id, tracked),
+            callId,
             name: tracked.toolName,
             status: "running",
             detail,
@@ -182,26 +186,64 @@ export class PiHistoryMapper {
 
   private mapToolResultMessage(
     message: Extract<PiAgentMessage, { role: "toolResult" }>,
-  ): AgentStreamEvent | null {
+  ): AgentStreamEvent[] {
     const tracked =
       this.pendingToolCalls.get(message.toolCallId) ?? parseToolArgs(message.toolName, null);
     this.pendingToolCalls.delete(message.toolCallId);
     const result = parseToolResult({ content: message.content, details: message.details });
-    const detail = this.mapToolDetail(message.toolCallId, tracked, result);
-    if (!detail) {
-      return null;
+    const detail = this.mapToolDetail(message.toolCallId, tracked, result, message.isError);
+    const callId = this.resolveToolCallId(message.toolCallId, tracked);
+    if (detail) {
+      const events: AgentStreamEvent[] = [];
+      if (detail.type === "sub_agent") {
+        const status = message.isError ? "failed" : "completed";
+        events.push(this.subagentUpsert(callId, detail, status));
+        const log = detail.log.trim();
+        if (log) {
+          events.push({
+            type: "provider_subagent",
+            provider: this.provider,
+            event: {
+              type: "timeline",
+              id: `pi-subagent:${callId}`,
+              item:
+                status === "failed"
+                  ? { type: "error", message: log }
+                  : { type: "assistant_message", text: log },
+            },
+          });
+        }
+      }
+      events.push({
+        type: "timeline",
+        provider: this.provider,
+        item: toToolResultTimelineItem({
+          callId,
+          name: resolveToolCallName(tracked, result),
+          isError: Boolean(message.isError),
+          detail,
+          errorText: extractTextFromToolResult(result) ?? "Tool call failed",
+        }),
+      });
+      return events;
     }
-    return {
-      type: "timeline",
-      provider: this.provider,
-      item: toToolResultTimelineItem({
-        callId: this.resolveToolCallId(message.toolCallId, tracked),
-        name: resolveToolCallName(tracked, result),
-        isError: Boolean(message.isError),
-        detail,
-        errorText: extractTextFromToolResult(result) ?? "Tool call failed",
-      }),
-    };
+    // Successful todo calls are suppressed from the tool-call card path;
+    // replay them as TodoListCard items the same way the live path does
+    // (see agent.ts). Terminal results with no parseable snapshot already
+    // produced an unknown tool-call card above.
+    if (tracked.toolName === "todo" && !message.isError) {
+      const item = mapPiTodoToolResult(result);
+      if (item) {
+        return [
+          {
+            type: "timeline",
+            provider: this.provider,
+            item,
+          },
+        ];
+      }
+    }
+    return [];
   }
 
   private mapBashExecutionMessage(
@@ -235,9 +277,32 @@ export class PiHistoryMapper {
     toolCallId: string,
     toolCall: PiTrackedToolCall,
     result: PiToolResult,
+    isError?: boolean,
+    isRunning?: boolean,
   ): ToolCallDetail | null {
     const hook = this.hooks.mapToolDetail;
-    return hook ? hook(toolCall, result, { toolCallId }) : mapToolDetail(toolCall, result);
+    return hook
+      ? hook(toolCall, result, { toolCallId })
+      : mapToolDetail(toolCall, result, isError, isRunning);
+  }
+
+  private subagentUpsert(
+    callId: string,
+    detail: Extract<ToolCallDetail, { type: "sub_agent" }>,
+    status: "running" | "completed" | "failed",
+  ): AgentStreamEvent {
+    return {
+      type: "provider_subagent",
+      provider: this.provider,
+      event: {
+        type: "upsert",
+        id: `pi-subagent:${callId}`,
+        title: detail.subAgentType ?? "Pi subagent",
+        description: detail.description ?? null,
+        status,
+        toolCallId: callId,
+      },
+    };
   }
 }
 
