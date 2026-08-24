@@ -140,6 +140,230 @@ describe("Pi history mapper", () => {
     ]);
   });
 
+  test("replays failed todo results as failed tool calls (isError forwarded)", async () => {
+    await expect(
+      collectHistory([
+        {
+          role: "assistant",
+          responseId: "response-1",
+          content: [
+            { type: "toolCall", id: "todo-1", name: "todo", arguments: { action: "update" } },
+          ],
+        },
+        {
+          role: "toolResult",
+          toolCallId: "todo-1",
+          toolName: "todo",
+          content: [{ type: "text", text: "Error: task #99 not found" }],
+          isError: true,
+          details: {
+            action: "update",
+            params: { action: "update", id: 99 },
+            tasks: [],
+            nextId: 1,
+            error: "task #99 not found",
+          },
+        },
+      ]),
+    ).resolves.toEqual([
+      {
+        type: "timeline",
+        provider: "pi",
+        item: {
+          type: "tool_call",
+          callId: "todo-1",
+          name: "todo",
+          status: "failed",
+          detail: {
+            type: "unknown",
+            input: { action: "update" },
+            output: {
+              content: [{ type: "text", text: "Error: task #99 not found" }],
+              details: {
+                action: "update",
+                params: { action: "update", id: 99 },
+                tasks: [],
+                nextId: 1,
+                error: "task #99 not found",
+              },
+            },
+          },
+          error: "Error: task #99 not found",
+        },
+      },
+    ]);
+  });
+
+  test("replays successful todo results as TodoListCard items, matching the live path", async () => {
+    await expect(
+      collectHistory([
+        {
+          role: "assistant",
+          responseId: "response-1",
+          content: [
+            {
+              type: "toolCall",
+              id: "todo-1",
+              name: "todo",
+              arguments: { action: "create", subject: "泡一杯咖啡" },
+            },
+          ],
+        },
+        {
+          role: "toolResult",
+          toolCallId: "todo-1",
+          toolName: "todo",
+          content: [{ type: "text", text: "Created #1: 泡一杯咖啡 (pending)" }],
+          details: {
+            action: "create",
+            params: { action: "create", subject: "泡一杯咖啡" },
+            tasks: [{ id: 1, subject: "泡一杯咖啡", status: "pending" }],
+            nextId: 2,
+          },
+        },
+      ]),
+    ).resolves.toEqual([
+      {
+        type: "timeline",
+        provider: "pi",
+        item: {
+          type: "todo",
+          items: [{ id: "1", text: "泡一杯咖啡", status: "pending", completed: false }],
+        },
+      },
+    ]);
+  });
+
+  test("restores native provider subagent rows from replayed task calls", async () => {
+    await expect(
+      collectHistory([
+        {
+          role: "assistant",
+          responseId: "response-1",
+          content: [
+            {
+              type: "toolCall",
+              id: "sub-1",
+              name: "subagent",
+              arguments: { agent: "scout", task: "Return the smoke-test result" },
+            },
+          ],
+        },
+        {
+          role: "toolResult",
+          toolCallId: "sub-1",
+          toolName: "subagent",
+          content: [{ type: "text", text: "subagent smoke test passed" }],
+        },
+      ]),
+    ).resolves.toEqual([
+      {
+        type: "provider_subagent",
+        provider: "pi",
+        event: {
+          type: "upsert",
+          id: "pi-subagent:sub-1",
+          title: "scout",
+          description: "Return the smoke-test result",
+          status: "running",
+          toolCallId: "sub-1",
+        },
+      },
+      {
+        type: "timeline",
+        provider: "pi",
+        item: {
+          type: "tool_call",
+          callId: "sub-1",
+          name: "subagent",
+          status: "running",
+          detail: {
+            type: "sub_agent",
+            subAgentType: "scout",
+            description: "Return the smoke-test result",
+            log: "",
+          },
+          error: null,
+        },
+      },
+      {
+        type: "provider_subagent",
+        provider: "pi",
+        event: {
+          type: "upsert",
+          id: "pi-subagent:sub-1",
+          title: "scout",
+          description: "Return the smoke-test result",
+          status: "completed",
+          toolCallId: "sub-1",
+        },
+      },
+      {
+        type: "provider_subagent",
+        provider: "pi",
+        event: {
+          type: "timeline",
+          id: "pi-subagent:sub-1",
+          item: { type: "assistant_message", text: "subagent smoke test passed" },
+        },
+      },
+      {
+        type: "timeline",
+        provider: "pi",
+        item: {
+          type: "tool_call",
+          callId: "sub-1",
+          name: "subagent",
+          status: "completed",
+          detail: {
+            type: "sub_agent",
+            subAgentType: "scout",
+            description: "Return the smoke-test result",
+            log: "subagent smoke test passed",
+          },
+          error: null,
+        },
+      },
+    ]);
+  });
+
+  test("replays terminal todo results with no snapshot as unknown tool cards", async () => {
+    await expect(
+      collectHistory([
+        {
+          role: "assistant",
+          responseId: "response-1",
+          content: [
+            { type: "toolCall", id: "todo-1", name: "todo", arguments: { action: "list" } },
+          ],
+        },
+        {
+          role: "toolResult",
+          toolCallId: "todo-1",
+          toolName: "todo",
+          content: [],
+        },
+      ]),
+    ).resolves.toEqual([
+      {
+        type: "timeline",
+        provider: "pi",
+        item: {
+          type: "tool_call",
+          callId: "todo-1",
+          name: "todo",
+          status: "completed",
+          detail: {
+            type: "unknown",
+            input: { action: "list" },
+            output: { content: [] },
+          },
+          error: null,
+        },
+      },
+    ]);
+  });
+
   test("uses Pi tree entry ids for replayed user messages", async () => {
     await expect(
       collectHistory(

@@ -5,6 +5,7 @@ import {
   parseToolArgs,
   parseToolResult,
   resolveToolCallName,
+  type PiToolResult,
 } from "./tool-call-mapper.js";
 
 describe("Pi tool call mapper", () => {
@@ -164,6 +165,100 @@ describe("Pi tool call mapper", () => {
       subAgentType: "reviewer",
       description: "Review the Pi mapper change",
       log: "The mapper change preserves provider status.",
+    });
+  });
+
+  test("suppresses successful todo calls (handled by agent layer)", () => {
+    const toolCall = parseToolArgs("todo", {
+      action: "create",
+      subject: "泡一杯咖啡",
+    });
+    const result = parseToolResult({
+      content: [{ type: "text", text: "Created #1: 泡一杯咖啡 (pending)" }],
+      details: {
+        action: "create",
+        params: { action: "create", subject: "泡一杯咖啡" },
+        tasks: [{ id: 1, subject: "泡一杯咖啡", status: "pending" }],
+        nextId: 2,
+      },
+    });
+
+    expect(mapToolDetail(toolCall, result)).toBeNull();
+  });
+
+  test("falls back to an unknown card for a successful todo call with malformed details", () => {
+    const toolCall = parseToolArgs("todo", {
+      action: "create",
+      subject: "泡一杯咖啡",
+    });
+    const malformedResults: Array<PiToolResult> = [
+      "just a string",
+      {},
+      { output: "Created #1" },
+      { details: { tasks: "not an array" } },
+      { details: { tasks: [{ id: "not a number", subject: 123 }] } },
+      {
+        details: {
+          tasks: [
+            { id: 1, subject: "正常任务", status: "pending" },
+            { id: "bad", status: "pending" },
+          ],
+        },
+      },
+    ];
+
+    for (const result of malformedResults) {
+      expect(mapToolDetail(toolCall, result)).toEqual({
+        type: "unknown",
+        input: { action: "create", subject: "泡一杯咖啡" },
+        output: result,
+      });
+    }
+  });
+
+  test("keeps suppressing successful todo calls that carry no result (still running)", () => {
+    const toolCall = parseToolArgs("todo", {
+      action: "list",
+    });
+
+    expect(mapToolDetail(toolCall, null, false, true)).toBeNull();
+    expect(mapToolDetail(toolCall, undefined, false, true)).toBeNull();
+  });
+
+  test("falls back to an unknown card for a terminal todo call with no result", () => {
+    const toolCall = parseToolArgs("todo", {
+      action: "create",
+      subject: "泡一杯咖啡",
+    });
+
+    expect(mapToolDetail(toolCall, null, false, false)).toEqual({
+      type: "unknown",
+      input: { action: "create", subject: "泡一杯咖啡" },
+      output: null,
+    });
+  });
+
+  test("maps failed todo calls to unknown detail so the error surfaces", () => {
+    const toolCall = parseToolArgs("todo", {
+      action: "update",
+      id: 99,
+      status: "completed",
+    });
+    const result = parseToolResult({
+      content: [{ type: "text", text: "Error: task #99 not found" }],
+      details: {
+        action: "update",
+        params: { action: "update", id: 99, status: "completed" },
+        tasks: [],
+        nextId: 1,
+        error: "task #99 not found",
+      },
+    });
+
+    expect(mapToolDetail(toolCall, result, true)).toEqual({
+      type: "unknown",
+      input: { action: "update", id: 99, status: "completed" },
+      output: result,
     });
   });
 
