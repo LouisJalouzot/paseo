@@ -239,6 +239,13 @@ class SessionEvents {
     });
   }
 
+  providerSubagentEvents() {
+    return this.events.filter(
+      (event): event is Extract<AgentStreamEvent, { type: "provider_subagent" }> =>
+        event.type === "provider_subagent",
+    );
+  }
+
   turnCompletedEvents() {
     return this.events.filter(
       (event): event is Extract<AgentStreamEvent, { type: "turn_completed" }> =>
@@ -667,6 +674,174 @@ describe("PiRpcAgentSession", () => {
         error: null,
       },
     ]);
+  });
+
+  test("publishes Pi subagent calls to the native provider subagent stream", async () => {
+    const { pi, session, events } = await createSession();
+    const fakeSession = pi.latestSession();
+
+    await session.startTurn("delegate this");
+    fakeSession.emit({
+      type: "tool_execution_start",
+      toolCallId: "subagent-1",
+      toolName: "subagent",
+      args: {
+        agent: "scout",
+        task: "Return the smoke-test result",
+      },
+    });
+    fakeSession.emit({
+      type: "tool_execution_end",
+      toolCallId: "subagent-1",
+      toolName: "subagent",
+      result: { content: [{ type: "text", text: "subagent smoke test passed" }] },
+      isError: false,
+    });
+    fakeSession.finishTurn();
+
+    await events.nextTurnCompletion();
+
+    expect(events.providerSubagentEvents()).toEqual([
+      {
+        type: "provider_subagent",
+        provider: "pi",
+        event: {
+          type: "upsert",
+          id: "pi-subagent:subagent-1",
+          title: "scout",
+          description: "Return the smoke-test result",
+          status: "running",
+          toolCallId: "subagent-1",
+          cwd: "/tmp/paseo-pi-rpc-test",
+        },
+      },
+      {
+        type: "provider_subagent",
+        provider: "pi",
+        event: {
+          type: "upsert",
+          id: "pi-subagent:subagent-1",
+          title: "scout",
+          description: "Return the smoke-test result",
+          status: "completed",
+          toolCallId: "subagent-1",
+          cwd: "/tmp/paseo-pi-rpc-test",
+        },
+      },
+      {
+        type: "provider_subagent",
+        provider: "pi",
+        event: {
+          type: "timeline",
+          id: "pi-subagent:subagent-1",
+          item: { type: "assistant_message", text: "subagent smoke test passed" },
+        },
+      },
+    ]);
+  });
+
+  test("marks an active Pi subagent failed when its tool call fails", async () => {
+    const { pi, session, events } = await createSession();
+    const fakeSession = pi.latestSession();
+
+    await session.startTurn("delegate this");
+    fakeSession.emit({
+      type: "tool_execution_start",
+      toolCallId: "subagent-fail-1",
+      toolName: "subagent",
+      args: { agent: "scout", task: "This will fail" },
+    });
+    fakeSession.emit({
+      type: "tool_execution_end",
+      toolCallId: "subagent-fail-1",
+      toolName: "subagent",
+      result: "child exploded",
+      isError: true,
+    });
+
+    expect(events.providerSubagentEvents().slice(-2)).toEqual([
+      {
+        type: "provider_subagent",
+        provider: "pi",
+        event: {
+          type: "upsert",
+          id: "pi-subagent:subagent-fail-1",
+          title: "scout",
+          description: "This will fail",
+          status: "failed",
+          toolCallId: "subagent-fail-1",
+          cwd: "/tmp/paseo-pi-rpc-test",
+        },
+      },
+      {
+        type: "provider_subagent",
+        provider: "pi",
+        event: {
+          type: "timeline",
+          id: "pi-subagent:subagent-fail-1",
+          item: { type: "error", message: "child exploded" },
+        },
+      },
+    ]);
+  });
+
+  test("marks active Pi subagents failed when the Pi process exits and ignores late updates", async () => {
+    const { pi, session, events } = await createSession();
+    const fakeSession = pi.latestSession();
+
+    await session.startTurn("delegate this");
+    fakeSession.emit({
+      type: "tool_execution_start",
+      toolCallId: "subagent-exit-1",
+      toolName: "subagent",
+      args: { agent: "scout", task: "Outlives the process" },
+    });
+    fakeSession.emit({ type: "process_exit", error: "pi process died" });
+    fakeSession.emit({
+      type: "tool_execution_end",
+      toolCallId: "subagent-exit-1",
+      toolName: "subagent",
+      result: { content: [{ type: "text", text: "late success" }] },
+      isError: false,
+    });
+
+    const statuses = events
+      .providerSubagentEvents()
+      .filter((event) => event.event.type === "upsert")
+      .map((event) => (event.event.type === "upsert" ? event.event.status : null));
+    expect(statuses).toEqual(["running", "failed"]);
+  });
+
+  test("marks an active Pi subagent canceled when its turn is interrupted", async () => {
+    const { pi, session, events } = await createSession();
+    const fakeSession = pi.latestSession();
+
+    await session.startTurn("delegate this");
+    fakeSession.emit({
+      type: "tool_execution_start",
+      toolCallId: "subagent-cancel-1",
+      toolName: "subagent",
+      args: {
+        agent: "scout",
+        task: "Wait for interruption",
+      },
+    });
+
+    await session.interrupt();
+
+    expect(events.providerSubagentEvents().at(-1)).toEqual({
+      type: "provider_subagent",
+      provider: "pi",
+      event: {
+        type: "upsert",
+        id: "pi-subagent:subagent-cancel-1",
+        title: "scout",
+        description: "Wait for interruption",
+        status: "canceled",
+        toolCallId: "subagent-cancel-1",
+        cwd: "/tmp/paseo-pi-rpc-test",
+      },
+    });
   });
 
   test("keeps one generated message id when Pi omits message start and response id", async () => {
