@@ -57,17 +57,26 @@ jobs:
           echo "patched_tag=$patched_tag" >> "$GITHUB_OUTPUT"
 
           if git ls-remote --exit-code --tags origin "refs/tags/$patched_tag" >/dev/null 2>&1; then
-            echo "source_exists=true" >> "$GITHUB_OUTPUT"
+            source_exists=true
           else
-            echo "source_exists=false" >> "$GITHUB_OUTPUT"
+            source_exists=false
           fi
+          echo "source_exists=$source_exists" >> "$GITHUB_OUTPUT"
 
           if gh release view "$patched_tag" --json assets \
-            --jq 'any(.assets[]; .name | endswith(".AppImage"))' | grep -qx true; then
+            --jq 'any(.assets[]; .name | endswith(".AppImage"))' 2>/dev/null | grep -qx true; then
+            asset_exists=true
+          else
+            asset_exists=false
+          fi
+          echo "asset_exists=$asset_exists" >> "$GITHUB_OUTPUT"
+
+          if [[ "$source_exists" == true && "$asset_exists" == true ]]; then
             echo "skip=true" >> "$GITHUB_OUTPUT"
             echo "$patched_tag and its AppImage already exist"
           else
             echo "skip=false" >> "$GITHUB_OUTPUT"
+            echo "source_exists=$source_exists asset_exists=$asset_exists; continuing"
           fi
 
       - uses: actions/setup-node@v4
@@ -95,28 +104,52 @@ jobs:
           fi
 
           git remote add upstream https://github.com/getpaseo/paseo.git
-          git fetch --force upstream "refs/tags/$UPSTREAM_TAG:refs/tags/$UPSTREAM_TAG"
+          git fetch --force --tags upstream
+          git fetch --force --tags origin
           git fetch --force origin refs/heads/patched-release:refs/remotes/origin/patched-release
-          git switch --detach "$(git rev-list -n 1 "$UPSTREAM_TAG")"
-          git switch -c "patched-$UPSTREAM_TAG"
 
-          # Keep this list in release order. Rebase the series manually when an
-          # upstream release changes a patched file, then update these SHAs.
-          patch_commits=(
-            df9706a4d # LaTeX, rebased onto v0.4.0
-            35730e9ee # LaTeX settings schema compatibility
-            e2cfba71f # OMP guard, rebased onto v0.4.0
-            73a46f8c3 # Pi background-task notifications, rebased onto v0.4.0
-            3512e4587 # Pi session names, rebased onto v0.4.0
-            c32533c53 # Backgrounded mobile push routing, rebased onto v0.4.0
+          patch_base="$(git describe --tags --match 'v[0-9]*' --exclude '*-patched.*' --abbrev=0 origin/patched-release 2>/dev/null || true)"
+          if [[ -z "$patch_base" ]]; then
+            echo "::error::Could not identify the upstream release base of origin/patched-release" >&2
+            exit 1
+          fi
+          echo "Patch stack base: $patch_base"
+
+          git switch --detach "$(git rev-list -n 1 "$UPSTREAM_TAG")"
+          git switch -C "patched-$UPSTREAM_TAG"
+
+          mapfile -t patch_commits < <(
+            git rev-list --reverse --first-parent "$patch_base..origin/patched-release" |
+              while IFS= read -r patch; do
+                subject="$(git show -s --format=%s "$patch")"
+                # Generated dependency hashes are recreated below for the new
+                # upstream tree and must never be carried as feature patches.
+                [[ "$subject" == "fix(nix): update npm dependency hash"* ]] && continue
+                printf '%s\n' "$patch"
+              done
           )
+          if (( ${#patch_commits[@]} == 0 )); then
+            echo "::error::No maintained patches found after $patch_base" >&2
+            exit 1
+          fi
+
+          echo "Applying ${#patch_commits[@]} maintained patches:"
           for patch in "${patch_commits[@]}"; do
-            if ! git cat-file -e "$patch^{commit}"; then
-              echo "::error::Maintained patch $patch is missing from origin/patched-release" >&2
+            subject="$(git show -s --format=%s "$patch")"
+            echo "- $patch $subject"
+            if git cherry-pick "$patch"; then
+              continue
+            fi
+            if git diff --name-only --diff-filter=U | grep -q .; then
+              echo "::error::Patch $patch conflicts with $UPSTREAM_TAG; resolve the patch stack manually" >&2
+              git status --short
               exit 1
             fi
-            if ! git cherry-pick "$patch"; then
-              echo "::error::Patch $patch conflicts with $UPSTREAM_TAG; resolve the patch series and update patch_commits" >&2
+            # A patch that is already upstream is a successful no-op.
+            if git cherry-pick --skip; then
+              echo "::notice::Skipping already-upstream patch $patch"
+            else
+              echo "::error::Could not apply or skip patch $patch" >&2
               git status --short
               exit 1
             fi
@@ -141,7 +174,14 @@ jobs:
             packages/app/src/utils/markdown-math.test.ts \
             packages/app/src/components/math-formula.browser.test.tsx \
             --environment jsdom --bail=1
+          npx vitest run \
+            packages/server/src/server/agent/providers/pi/agent.test.ts \
+            packages/server/src/server/agent/providers/pi/history-mapper.test.ts \
+            packages/server/src/server/agent/providers/pi/todo-mapper.test.ts \
+            packages/server/src/server/agent/providers/pi/tool-call-mapper.test.ts \
+            --bail=1
           npm run typecheck --workspace=@getpaseo/app
+          npm run typecheck --workspace=@getpaseo/server
           nix build .#default
 
       - name: Build patched AppImage
