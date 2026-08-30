@@ -155,6 +155,14 @@ jobs:
             fi
           done
 
+          # The built-in token cannot push changes to workflow files. Keep the
+          # existing patched branch's workflow definitions in the release tree.
+          if ! git diff --quiet origin/patched-release -- .github/workflows; then
+            git checkout origin/patched-release -- .github/workflows
+            git add -A .github/workflows
+            git commit -m "ci: preserve fork workflow files"
+          fi
+
       - name: Update Nix dependency hash
         if: steps.release.outputs.skip == 'false' && steps.release.outputs.source_exists == 'false'
         run: |
