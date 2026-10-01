@@ -4,7 +4,9 @@ on:
   push:
     tags:
       - "v*"
+      - "!v*-patched.*"
       - "android-v*"
+      - "!android-v*-patched.*"
   workflow_dispatch:
     inputs:
       tag:
