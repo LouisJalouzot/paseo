@@ -1908,6 +1908,7 @@ describe("PiRpcAgentSession", () => {
         model: "kimi-coding/kimi-k3",
         thinkingOptionId: effective,
         modeId: null,
+        extra: { sessionName: null },
       });
     },
   );
