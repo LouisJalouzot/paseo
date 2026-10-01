@@ -4,10 +4,15 @@ on:
   push:
     tags:
       - "v*"
+      - "!v*-patched.*"
       - "desktop-v*"
+      - "!desktop-v*-patched.*"
       - "desktop-macos-v*"
+      - "!desktop-macos-v*-patched.*"
       - "desktop-linux-v*"
+      - "!desktop-linux-v*-patched.*"
       - "desktop-windows-v*"
+      - "!desktop-windows-v*-patched.*"
   workflow_dispatch:
     inputs:
       tag:
