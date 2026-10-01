@@ -5,8 +5,10 @@ on:
     tags:
       - "v*"
       - "!v*-beta.*"
+      - "!v*-patched.*"
       - "app-v*"
       - "!app-v*-beta.*"
+      - "!app-v*-patched.*"
   workflow_dispatch:
 
 jobs:
