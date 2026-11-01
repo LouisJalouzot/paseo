@@ -2343,6 +2343,10 @@ export const zhCN: TranslationResources = {
         label: "始终展开推理过程",
         description: "默认情况下完全展开 AI 的思考和推理过程",
       },
+      renderLatex: {
+        label: "渲染 LaTeX 公式",
+        description: "使用 KaTeX 排版助手数学公式",
+      },
       chatDisplay: {
         label: "聊天显示",
         description: "聊天中显示多少智能体的工作",

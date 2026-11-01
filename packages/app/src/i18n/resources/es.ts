@@ -2423,6 +2423,10 @@ export const es: TranslationResources = {
         description:
           "Mostrar los bloques de pensamiento y razonamiento del agente totalmente expandidos de forma predeterminada",
       },
+      renderLatex: {
+        label: "Renderizar fórmulas LaTeX",
+        description: "Compone las fórmulas del asistente con KaTeX",
+      },
       chatDisplay: {
         label: "Visualización del chat",
         description: "Cuánto del trabajo del agente muestra el chat",

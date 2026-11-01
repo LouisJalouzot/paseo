@@ -2406,6 +2406,10 @@ export const ptBR: TranslationResources = {
         description:
           "Mostrar os blocos de pensamento e raciocínio do agente totalmente expandidos por padrão",
       },
+      renderLatex: {
+        label: "Renderizar fórmulas LaTeX",
+        description: "Formata a matemática do assistente com KaTeX",
+      },
       chatDisplay: {
         label: "Exibição do chat",
         description: "Quanto do trabalho do agente o chat mostra",

@@ -5,6 +5,7 @@ import {
   useAssistantFileLinkActions,
   useAssistantFileLinkEnvironment,
 } from "@/assistant-file-links";
+import { useSettings } from "@/hooks/use-settings";
 import { useStableEvent } from "@/hooks/use-stable-event";
 import { AttachmentLightbox, type ImageLightboxSource } from "@/components/attachment-lightbox";
 import type { Theme } from "@/styles/theme";
@@ -21,6 +22,8 @@ import { MermaidFence, MermaidStreamingContext, splitMermaidFences } from "./fen
 
 const ThemedMarkdown = withUnistyles(EnrichedMarkdownText);
 const MD4C_FLAGS = { latexMath: false, hardSoftBreaks: true, admonitions: true };
+// Math needs the optional katex peer dependency on web; native builds ship without RaTeX.
+const MD4C_FLAGS_MATH = { ...MD4C_FLAGS, latexMath: true };
 
 // Reading the breakpoint here makes Unistyles restyle the text when the layout crosses it.
 const markdownStyle =
@@ -77,6 +80,7 @@ const MarkdownPart = memo(function MarkdownPart({
   onLinkPress,
   ...imageContext
 }: MarkdownRendererProps) {
+  const renderLatex = useSettings((settings) => settings.renderLatex);
   const environment = useAssistantFileLinkEnvironment();
   const actions = useAssistantFileLinkActions();
   const client =
@@ -118,7 +122,7 @@ const MarkdownPart = memo(function MarkdownPart({
               uniProps={pickMarkdownStyle(compact, muted)}
               flavor="github"
               selectable={selectable}
-              md4cFlags={MD4C_FLAGS}
+              md4cFlags={isWeb && renderLatex ? MD4C_FLAGS_MATH : MD4C_FLAGS}
               linkRecognition={linkRecognition}
               enableTaskListItemToggle={false}
               enableLinkPreview={false}

@@ -2421,6 +2421,10 @@ export const fr: TranslationResources = {
         label: "Toujours afficher le raisonnement",
         description: "Afficher par défaut le raisonnement de l’agent entièrement déplié",
       },
+      renderLatex: {
+        label: "Afficher les formules LaTeX",
+        description: "Compose les formules de l’assistant avec KaTeX",
+      },
       chatDisplay: {
         label: "Affichage du chat",
         description: "La part du travail de l’agent affichée dans le chat",

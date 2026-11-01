@@ -2405,6 +2405,10 @@ export const ar: TranslationResources = {
         label: "عرض التفكير دائماً",
         description: "إظهار تفكير الوكيل وخطوات الاستدلال بشكل كامل بشكل افتراضي",
       },
+      renderLatex: {
+        label: "عرض صيغ LaTeX",
+        description: "تنسيق رياضيات المساعد باستخدام KaTeX",
+      },
       chatDisplay: {
         label: "عرض المحادثة",
         description: "مقدار عمل الوكيل الذي تعرضه المحادثة",

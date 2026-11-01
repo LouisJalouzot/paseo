@@ -2382,6 +2382,10 @@ export const ko: TranslationResources = {
         label: "추론 항상 펼치기",
         description: "에이전트의 사고 및 추론 블록을 기본적으로 모두 펼쳐 표시합니다.",
       },
+      renderLatex: {
+        label: "LaTeX 수식 렌더링",
+        description: "KaTeX로 수식을 조판합니다",
+      },
       chatDisplay: {
         label: "채팅 표시",
         description: "채팅에 표시할 에이전트 작업의 양",

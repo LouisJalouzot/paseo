@@ -2494,6 +2494,10 @@ export const en = {
         label: "Always expand reasoning",
         description: "Show agent thinking and chain-of-thought blocks fully expanded by default",
       },
+      renderLatex: {
+        label: "Render LaTeX formulas",
+        description: "Typeset assistant math with KaTeX",
+      },
       chatDisplay: {
         label: "Chat display",
         description: "How much of an agent's work the chat shows",
