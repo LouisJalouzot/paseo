@@ -177,15 +177,15 @@ jobs:
         run: |
           npm ci
           npm run build:app-deps
+          # The app's own vitest config defines __DEV__; run from the package.
+          npm test --workspace=@getpaseo/app -- \
+            src/components/markdown/renderer.test.ts \
+            src/hooks/use-settings/storage.test.ts \
+            --bail=1
           npx vitest run \
-            packages/app/src/utils/__tests__/split-markdown-blocks.test.ts \
-            packages/app/src/utils/markdown-math.test.ts \
-            packages/app/src/components/math-formula.browser.test.tsx \
-            --environment jsdom --bail=1
-          npx vitest run \
+            packages/server/src/server/agent-attention-policy.test.ts \
             packages/server/src/server/agent/providers/pi/agent.test.ts \
             packages/server/src/server/agent/providers/pi/history-mapper.test.ts \
-            packages/server/src/server/agent/providers/pi/todo-mapper.test.ts \
             packages/server/src/server/agent/providers/pi/tool-call-mapper.test.ts \
             --bail=1
           npm run typecheck --workspace=@getpaseo/app
