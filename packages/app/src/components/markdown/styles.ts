@@ -64,6 +64,13 @@ export function createMarkdownStyles(
           caution: { color: theme.colors.statusDanger, backgroundColor: theme.colors.surface2 },
         },
       },
+      // The library defaults to dark text on a light box, unreadable in dark themes.
+      math: {
+        color: paragraph.color,
+        backgroundColor: theme.colors.surface1,
+        ...block,
+      },
+      inlineMath: { color: paragraph.color },
       link: { color: theme.colors.accentBright, underline: false },
       linkVariants: {
         "^(?!https?://).+": {

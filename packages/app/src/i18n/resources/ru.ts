@@ -2482,6 +2482,10 @@ export const ru: TranslationResources = {
         description:
           "По умолчанию полностью разворачивать блоки размышлений и хода рассуждений агента",
       },
+      renderLatex: {
+        label: "Отображать формулы LaTeX",
+        description: "Набирает формулы помощника с помощью KaTeX",
+      },
       chatDisplay: {
         label: "Отображение чата",
         description: "Какую часть работы агента показывает чат",
