@@ -59,6 +59,7 @@ interface PiToolResultObject {
 
 interface PiToolResultDetails {
   diff?: string;
+  patch?: string;
   [key: string]: unknown;
 }
 
@@ -156,6 +157,7 @@ const PiToolResultContentSchema = z.union([
 const PiToolResultDetailsSchema = z
   .object({
     diff: z.string().optional(),
+    patch: z.string().optional(),
   })
   .passthrough();
 
@@ -298,16 +300,18 @@ export function mapToolDetail(toolCall: PiTrackedToolCall, result?: PiToolResult
         limit: toolCall.args.limit,
       };
     case "edit": {
-      const firstEdit = toolCall.args.edits[0];
-      const unifiedDiff =
-        parsedResult && typeof parsedResult !== "string" ? parsedResult.details?.diff : undefined;
+      const { edits } = toolCall.args;
+      const details =
+        parsedResult && typeof parsedResult !== "string" ? parsedResult.details : undefined;
 
       return {
         type: "edit",
         filePath: toolCall.args.path,
-        oldString: firstEdit?.oldText,
-        newString: firstEdit?.newText,
-        unifiedDiff,
+        // All edits, so multi-edit calls preview fully before the result arrives.
+        oldString: edits.length ? edits.map((edit) => edit.oldText).join("\n") : undefined,
+        newString: edits.length ? edits.map((edit) => edit.newText).join("\n") : undefined,
+        // Pi's `diff` is its TUI rendering (inline line numbers, no hunks); `patch` is unified.
+        unifiedDiff: details?.patch ?? details?.diff,
       };
     }
     case "write":

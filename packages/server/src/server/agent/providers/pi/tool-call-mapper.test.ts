@@ -32,6 +32,21 @@ describe("Pi tool call mapper", () => {
     });
   });
 
+  test("maps multi-edit args to all edits and prefers the unified patch", () => {
+    const toolCall = parseToolArgs("edit", {
+      path: "app.ts",
+      edits: [
+        { oldText: "a", newText: "b" },
+        { oldText: "c", newText: "d" },
+      ],
+    });
+    const patch = "--- app.ts\n+++ app.ts\n@@ -1,2 +1,2 @@\n-a\n+b\n";
+    const result = parseToolResult({ details: { diff: "-1 a\n+1 b", patch } });
+
+    expect(mapToolDetail(toolCall)).toMatchObject({ oldString: "a\nc", newString: "b\nd" });
+    expect(mapToolDetail(toolCall, result)).toMatchObject({ unifiedDiff: patch });
+  });
+
   test("preserves ordinary writes as write details", () => {
     const toolCall = parseToolArgs("write", {
       path: "notes.txt",
